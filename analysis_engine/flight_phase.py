@@ -19,11 +19,13 @@ from analysis_engine.library import (
     bearing_and_distance,
     cycle_finder,
     find_low_alts,
+    find_nearest_slice,
     first_order_washout,
     first_valid_sample,
     heading_diff,
     index_at_value,
     is_index_within_slice,
+    is_index_within_slices,
     is_slice_within_slice,
     last_valid_sample,
     mask_outside_slices,
@@ -1945,19 +1947,69 @@ class GoAround5MinRating(FlightPhaseNode):
     '''
     align_frequency = 1
 
-    def derive(self, gas=S('Go Around And Climbout'), tdwn=S('Touchdown')):
-        '''
-        We check that the computed phase cannot extend beyond the last
-        touchdown, which may arise if a go-around was detected on the final
-        approach.
-        '''
-        for ga in gas:
-            startpoint = ga.slice.start
-            endpoint = ga.slice.start + 300
-            if tdwn:
-                endpoint = min(endpoint, tdwn[-1].index)
-            if startpoint < endpoint:
-                self.create_phase(slice(startpoint, endpoint))
+    def get_metrics(self, angle):
+        window_sizes = [2,4,8,16,32]
+        metrics = np.ma.ones(len(angle)) * 1000000
+        for l in window_sizes:
+            maxy = filters.maximum_filter1d(angle, l)
+            miny = filters.minimum_filter1d(angle, l)
+            m = (maxy - miny) / l
+            metrics = np.minimum(metrics, m)
+
+        metrics = medfilt(metrics,3)
+        metrics = 200.0 * metrics
+
+        return metrics
+
+    def derive(self, gas=KTI('Go Around'),
+               eng_np=P('Eng (*) Np Avg'),
+               duration=A('HDF Duration'),
+               eng_type=A('Engine Propulsion'),):
+
+        five_minutes = 300 * self.frequency
+        #define max index to prevent out of bounds exception
+        max_idx = duration.value * self.frequency
+
+        if eng_type and eng_type.value == 'PROP':
+            # smoothen the signal
+            filter_median_window = 11 # 11 to get one median per section in window
+            enp_filt = medfilt(eng_np.array, filter_median_window)
+            enp_filt = np.ma.array(enp_filt)
+
+            #generate RoC array and find 'flat' slices
+            g = self.get_metrics(enp_filt)
+            enp_filt.mask = g > 40
+            flat_slices = np.ma.clump_unmasked(enp_filt)
+
+            for ga in gas:
+                ga_flat_slices = [s for s in flat_slices if s.stop > ga.index]
+                rating_end = ga_slice_avg = None
+
+                if not is_index_within_slices(ga.index, ga_flat_slices):
+                    ga_slice_avg = np.ma.average(enp_filt[find_nearest_slice(ga.index, ga_flat_slices)])
+
+                for flat in ga_flat_slices:
+                    if ga_slice_avg is None and is_index_within_slice(ga.index, flat):
+                        ga_slice_avg = np.ma.average(enp_filt[flat])
+
+                    elif ga_slice_avg is not None:
+                        flat_avg = np.ma.average(enp_filt[flat])
+                        if abs(ga_slice_avg - flat_avg) >= 5:
+                            rating_end = flat.start
+                            break
+                    else:
+                        continue
+
+                if rating_end is None:
+                    rating_end = ga.index + (five_minutes)
+                self.create_phase(slice(ga.index, min(rating_end, max_idx)))
+        else:
+            for ga in gas:
+                startpoint = ga.index
+                endpoint = ga.index + 300
+
+                if startpoint < endpoint:
+                    self.create_phase(slice(startpoint, endpoint))
 
 
 class MaximumContinuousPower(FlightPhaseNode):
