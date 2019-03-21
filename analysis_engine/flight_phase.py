@@ -1978,11 +1978,11 @@ class GoAround5MinRating(FlightPhaseNode):
 
             #generate RoC array and find 'flat' slices
             g = self.get_metrics(enp_filt)
-            enp_filt.mask = g > 40
+            enp_filt.mask = g > 12.5
             flat_slices = np.ma.clump_unmasked(enp_filt)
 
             for ga in gas:
-                ga_flat_slices = [s for s in flat_slices if s.stop > ga.index]
+                ga_flat_slices = [s for s in flat_slices if s.stop >= ga.index]
                 rating_end = ga_slice_avg = None
 
                 if not is_index_within_slices(ga.index, ga_flat_slices):
@@ -1994,7 +1994,7 @@ class GoAround5MinRating(FlightPhaseNode):
 
                     elif ga_slice_avg is not None:
                         flat_avg = np.ma.average(enp_filt[flat])
-                        if abs(ga_slice_avg - flat_avg) >= 5:
+                        if abs(ga_slice_avg - flat_avg) >= 0.30:
                             rating_end = flat.start
                             break
                     else:
