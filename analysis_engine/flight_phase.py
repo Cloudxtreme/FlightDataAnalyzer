@@ -1939,13 +1939,19 @@ class Takeoff5MinRating(FlightPhaseNode):
                 self.create_phase(slice(toff.index, min(toff.index + five_minutes, max_idx)))
 
 
-# TODO: Write some unit tests!
 class GoAround5MinRating(FlightPhaseNode):
     '''
     For engines, the period of high power operation is normally 5 minutes from
     the start of takeoff. Also applies in the case of a go-around.
     '''
     align_frequency = 1
+
+    @classmethod
+    def can_operate(cls, available, eng_type=A('Engine Propulsion')):
+        if eng_type and eng_type.value == 'PROP':
+            return all_of(('Go Around', 'Eng (*) Np Avg', 'HDF Duration', 'Engine Propulsion'), available)
+        else:
+            return all_of(('Go Around', 'HDF Duration'), available)
 
     def get_metrics(self, angle):
         window_sizes = [2,4,8,16,32]
@@ -1964,7 +1970,7 @@ class GoAround5MinRating(FlightPhaseNode):
     def derive(self, gas=KTI('Go Around'),
                eng_np=P('Eng (*) Np Avg'),
                duration=A('HDF Duration'),
-               eng_type=A('Engine Propulsion'),):
+               eng_type=A('Engine Propulsion')):
 
         five_minutes = 300 * self.frequency
         #define max index to prevent out of bounds exception
@@ -2000,16 +2006,16 @@ class GoAround5MinRating(FlightPhaseNode):
                     else:
                         continue
 
-                if rating_end is None:
-                    rating_end = ga.index + (five_minutes)
+                if rating_end is None or rating_end > (ga.index + five_minutes):
+                    rating_end = ga.index + five_minutes
                 self.create_phase(slice(ga.index, min(rating_end, max_idx)))
         else:
             for ga in gas:
                 startpoint = ga.index
-                endpoint = ga.index + 300
+                endpoint = ga.index + five_minutes
 
                 if startpoint < endpoint:
-                    self.create_phase(slice(startpoint, endpoint))
+                    self.create_phase(slice(startpoint, min(endpoint, max_idx)))
 
 
 class MaximumContinuousPower(FlightPhaseNode):
