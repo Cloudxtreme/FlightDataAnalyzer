@@ -3772,10 +3772,9 @@ class TestTrackDeviationFromRunway(unittest.TestCase):
                                   'longitude': 8.53075},
                     'magnetic_heading': 248.0,
                     'start': {'latitude': 50.040053, 'longitude': 8.586531},
-                    'strip': {'id': 2496,
-                              'length': 13123,
-                              'surface': 'CON',
-                              'width': 147}},
+                    'length': 13123,
+                    'surface': 'CON',
+                    'width': 147},
             turnoff=8998.2717013888887)])
         heading_track = load(os.path.join(test_data_path, 'HeadingDeviationFromRunway_heading_track.nod'))
         to_runway = load(os.path.join(test_data_path, 'HeadingDeviationFromRunway_runway.nod'))
@@ -5458,8 +5457,9 @@ class TestMagneticVariationFromRunway(unittest.TestCase):
                     'start': {'elevation': 24,
                               'latitude': 28.441860630699686,
                               'longitude': -13.86412042467909},
-                    'strip': {'id': 4947, 'length': 11175,
-                              'surface': 'ASP', 'width': 147}}
+                    'length': 11175,
+                    'surface': 'ASP',
+                    'width': 147}
         land_rwy = {'end': {'elevation': -12,
                             'latitude': 52.32863339288183,
                             'longitude': 4.70886201465568},
@@ -5469,8 +5469,9 @@ class TestMagneticVariationFromRunway(unittest.TestCase):
                     'start': {'elevation': -13,
                               'latitude': 52.36023790740991,
                               'longitude': 4.7117260390982185},
-                    'strip': {'id': 4045, 'length': 12467,
-                              'surface': 'ASP', 'width': 183}}
+                    'length': 12467,
+                    'surface': 'ASP',
+                    'width': 183}
         mag_var = load(os.path.join(test_data_path, 'magnetic_variation_from_runway__mag_vari.nod'))
         mag_var_rwy = MagneticVariationFromRunway()
         mag_var_rwy.derive(
@@ -5494,11 +5495,13 @@ class TestMagneticVariationFromRunway(unittest.TestCase):
                     'start': {'elevation': 43,
                               'latitude': 52.69327604095164,
                               'longitude': -8.943465355819775},
-                    'strip': {'id': 2014, 'length': 10495,
-                              'surface': 'ASP', 'width': 147}}
+                    'length': 10495,
+                    'surface': 'ASP',
+                    'width': 147}
         land_rwy = {# MISSING VITAL LAT/LONG INFORMATION
-                    'strip': {'id': 2322, 'length': 8858,
-                              'surface': 'ASP', 'width': 197}}
+                    'length': 8858,
+                    'surface': 'ASP',
+                    'width': 197}
         mag_var = P('Magnetic Variation', np.ma.zeros(14272))
         mag_var_rwy = MagneticVariationFromRunway()
         mag_var_rwy.derive(
@@ -5521,7 +5524,9 @@ class TestMagneticVariationFromRunway(unittest.TestCase):
                     'identifier': '05',
                     'magnetic_heading': 52.9,
                     'start': {'elevation': 354, 'latitude': 32.686022, 'longitude': -83.660633},
-                    'strip': {'id': 6726, 'length': 6501, 'surface': 'ASP', 'width': 150}}
+                    'length': 6501,
+                    'surface': 'ASP',
+                    'width': 150}
         land_rwy = {'end': {'elevation': 1289,
                             'latitude': 36.9130564484,
                             'longitude': -94.012504957},
@@ -5531,7 +5536,9 @@ class TestMagneticVariationFromRunway(unittest.TestCase):
                     'start': {'elevation': 1289,
                               'latitude': 36.899355805,
                               'longitude': -94.0129958013},
-                    'strip': {'id': 12132, 'length': 5000, 'surface': 'ASPH', 'width': 75}}
+                    'length': 5000,
+                    'surface': 'ASPH',
+                    'width': 75}
         mag_var = P('Magnetic Variation', np.ma.array([0.0]*9336))
         mag_var_rwy = MagneticVariationFromRunway()
         mag_var_rwy.derive(
@@ -6240,10 +6247,9 @@ class TestCoordinatesSmoothed(TemporaryFileTest, unittest.TestCase):
                                     'start': {'elevation': 3320,
                                               'latitude': 31.513997,
                                               'longitude': 65.861714},
-                                    'strip': {'id': 22,
-                                              'length': 10532,
-                                              'surface': 'ASP',
-                                              'width': 147}}),
+                                    'length': 10532,
+                                    'surface': 'ASP',
+                                    'width': 147}),
                    ApproachItem('LANDING', slice(12928.0, 13440.0),
                             ils_freq=111.3,
                             gs_est=slice(13034, 13262),
@@ -6272,10 +6278,9 @@ class TestCoordinatesSmoothed(TemporaryFileTest, unittest.TestCase):
                                                   'longitude': 55.345722},
                                     'magnetic_heading': 299.7,
                                     'start': {'latitude': 25.243322, 'longitude': 55.381519},
-                                    'strip': {'id': 11,
-                                              'length': 13124,
-                                              'surface': 'ASP',
-                                              'width': 150}})])
+                                    'length': 13124,
+                                    'surface': 'ASP',
+                                    'width': 150})])
 
         self.toff = [Section(name='Takeoff',
                              slice=slice(372, 414, None),
@@ -6283,19 +6288,18 @@ class TestCoordinatesSmoothed(TemporaryFileTest, unittest.TestCase):
                              stop_edge=413.12204760355382)]
 
         self.toff_rwy = A(name = 'FDR Takeoff Runway',
-                          value = {'end': {'elevation': 4843,
-                                           'latitude': 34.957972,
-                                           'longitude': 69.272944},
-                                   'id': 41,
-                                   'identifier': '03',
-                                   'magnetic_heading': 26.0,
-                                   'start': {'elevation': 4862,
+                          value = { 'end': {'elevation': 4843,
+                                            'latitude': 34.957972,
+                                            'longitude': 69.272944},
+                                    'id': 41,
+                                    'identifier': '03',
+                                    'magnetic_heading': 26.0,
+                                    'start': {'elevation': 4862,
                                              'latitude': 34.934306,
                                              'longitude': 69.257},
-                                   'strip': {'id': 21,
-                                             'length': 9852,
-                                             'surface': 'CON',
-                                             'width': 179}})
+                                    'length': 9852,
+                                    'surface': 'CON',
+                                    'width': 179})
 
         self.source_file_path = os.path.join(
             test_data_path, 'flight_with_go_around_and_landing.hdf5')
@@ -6411,16 +6415,15 @@ class TestApproachRange(TemporaryFileTest, unittest.TestCase):
                      landing_runway={'end': {'elevation': 3294,
                                      'latitude': 31.497511,
                                      'longitude': 65.833933},
-                             'id': 44,
-                             'identifier': '23',
-                             'magnetic_heading': 232.9,
-                             'start': {'elevation': 3320,
+                              'id': 44,
+                              'identifier': '23',
+                              'magnetic_heading': 232.9,
+                              'start': {'elevation': 3320,
                                        'latitude': 31.513997,
                                        'longitude': 65.861714},
-                             'strip': {'id': 22,
-                                       'length': 10532,
-                                       'surface': 'ASP',
-                                       'width': 147}}),
+                              'length': 10532,
+                              'surface': 'ASP',
+                              'width': 147}),
             ApproachItem('LANDING', slice(12928, 13440),
                      ils_freq=111.3,
                      gs_est=slice(13034, 13262),
@@ -6436,23 +6439,22 @@ class TestApproachRange(TemporaryFileTest, unittest.TestCase):
                               'magnetic_variation': 'E001315 0706',
                               'name': 'Dubai Intl'},
                      landing_runway={'end': {'latitude': 25.262131, 'longitude': 55.347572},
-                             'glideslope': {'angle': 3.0,
+                              'glideslope': {'angle': 3.0,
                                             'latitude': 25.246333,
                                             'longitude': 55.378417,
                                             'threshold_distance': 1508},
-                             'id': 22,
-                             'identifier': '30L',
-                             'localizer': {'beam_width': 4.5,
-                                           'frequency': 111300.0,
-                                           'heading': 300,
-                                           'latitude': 25.263139,
-                                           'longitude': 55.345722},
-                             'magnetic_heading': 299.7,
-                             'start': {'latitude': 25.243322, 'longitude': 55.381519},
-                             'strip': {'id': 11,
-                                       'length': 13124,
-                                       'surface': 'ASP',
-                                       'width': 150}})])
+                              'id': 22,
+                              'identifier': '30L',
+                              'localizer': {'beam_width': 4.5,
+                                            'frequency': 111300.0,
+                                            'heading': 300,
+                                            'latitude': 25.263139,
+                                            'longitude': 55.345722},
+                              'magnetic_heading': 299.7,
+                              'start': {'latitude': 25.243322, 'longitude': 55.381519},
+                              'length': 13124,
+                              'surface': 'ASP',
+                              'width': 150})])
 
         self.toff = Section(name='Takeoff',
                        slice=slice(372, 414, None),
@@ -6461,18 +6463,17 @@ class TestApproachRange(TemporaryFileTest, unittest.TestCase):
 
         self.toff_rwy = A(name='FDR Takeoff Runway',
                           value={'end': {'elevation': 4843,
-                                         'latitude': 34.957972,
-                                         'longitude': 69.272944},
-                                 'id': 41,
-                                 'identifier': '03',
-                                 'magnetic_heading': 26.0,
-                                 'start': {'elevation': 4862,
-                                           'latitude': 34.934306,
-                                           'longitude': 69.257},
-                                 'strip': {'id': 21,
-                                           'length': 9852,
-                                           'surface': 'CON',
-                                           'width': 179}})
+                                        'latitude': 34.957972,
+                                        'longitude': 69.272944},
+                                  'id': 41,
+                                  'identifier': '03',
+                                  'magnetic_heading': 26.0,
+                                  'start': {'elevation': 4862,
+                                            'latitude': 34.934306,
+                                            'longitude': 69.257},
+                                  'length': 9852,
+                                  'surface': 'CON',
+                                  'width': 179})
 
         self.source_file_path = os.path.join(
             test_data_path, 'flight_with_go_around_and_landing.hdf5')
