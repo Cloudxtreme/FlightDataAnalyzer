@@ -5717,8 +5717,9 @@ class TestRunwayDistances(unittest.TestCase):
                                        'threshold_distance': 1161},
                         'start': {'latitude': 60.30662494,
                                   'longitude': 5.21370074},
-                        'strip': {'width': 147, 'length': 9810,
-                                  'id': 4097, 'surface': u'ASP'},
+                        'width': 147,
+                        'length': 9810,
+                        'surface': u'ASP',
                         'identifier': u'17', 'id': 8193}
 
     def test_runway_distances(self):
@@ -8358,7 +8359,9 @@ class TestNearestRunway(unittest.TestCase):
                 'latitude': 51.477467,
                 'longitude': -0.49373899999999565,
             },
-            'strip': {'id': 5408, 'length': 12799, 'surface': u'ASP', 'width': 164},
+            'length': 12799,
+            'surface': u'ASP',
+            'width': 164,
         },
         '002': {
             'id': 10814,
@@ -8390,7 +8393,9 @@ class TestNearestRunway(unittest.TestCase):
                 'latitude': 51.46476099999998,
                 'longitude': -0.49111899999999203
             },
-            'strip': {'id': 5407, 'length': 12001, 'surface': u'ASP', 'width': 164}
+            'length': 12001,
+            'surface': u'ASP',
+            'width': 164,
         },
         '003': {
             'id': 5,
@@ -8404,12 +8409,9 @@ class TestNearestRunway(unittest.TestCase):
                 'latitude': 41.982785999999997,
                 'longitude': -87.900400000000005,
             },
-            'strip': {
-                'id': 3,
-                'length': 5332,
-                'surface': u'ASP',
-                'width': 150,
-            },
+            'length': 5332,
+            'surface': u'ASP',
+            'width': 150,
         },
         '004': {
             'id': 13411,
@@ -8425,12 +8427,9 @@ class TestNearestRunway(unittest.TestCase):
                 'elevation': 620,
                 'longitude': -87.748553
             },
-            'strip': {
-                'width': 60,
-                'length': 3859,
-                'id': 6706,
-                'surface': u'CON'
-            },
+            'width': 60,
+            'length': 3859,
+            'surface': u'CON',
             'localizer': {
                 'elevation': 620,
                 'is_offset': False
@@ -8449,12 +8448,9 @@ class TestNearestRunway(unittest.TestCase):
                 'latitude': 41.997416999999999,
                 'longitude': -87.900406000000004,
             },
-            'strip': {
-                'id': 3,
-                'length': 5332,
-                'surface': u'ASP',
-                'width': 150,
-            },
+            'length': 5332,
+            'surface': u'ASP',
+            'width': 150,
         },
         '006': u'Magnetic heading is required to determine runway.',
         '007': u'Heading must be numeric.',
@@ -8497,7 +8493,9 @@ class TestNearestRunway(unittest.TestCase):
                 'latitude': 43.29770864269298,
                 'longitude': -2.901346028469935
             },
-            'strip': {'id': 4958, 'length': 8530, 'surface': u'ASP', 'width': 148},
+            'length': 8530,
+            'surface': u'ASP',
+            'width': 148,
         },
         '018': {
             'id': 11172,
@@ -8526,7 +8524,10 @@ class TestNearestRunway(unittest.TestCase):
                           'latitude': 50.942072718495965,
                           'longitude': -1.3613830932541067
                           },
-            'strip': {'id': 5586, 'length': 5653, 'surface': u'ASP', 'width': 120}},
+            'length': 5653,
+            'surface': u'ASP',
+            'width': 120,
+        },
     }
 
     def test_find_nearest_with_valid_heading(self):

@@ -24,7 +24,7 @@ class TestIsHeliport(unittest.TestCase):
     def test_is_heliport(self):
         self.assertFalse(is_heliport(aeroplane, airports['gatwick'], airports['gatwick']['runways'][0]))
         self.assertTrue(is_heliport(helicopter, None, None))
-        helipad = {'identifier':'H', 'strip': {'length': 0}}
+        helipad = {'identifier':'H', 'length': 0}
         heliport = {'name':'Vangard helipad', 'runways':[helipad]}
         self.assertTrue(is_heliport(helicopter, heliport, helipad))
         self.assertTrue(is_heliport(helicopter, {}, helipad))

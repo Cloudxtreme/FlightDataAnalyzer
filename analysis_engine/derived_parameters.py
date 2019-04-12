@@ -4556,7 +4556,7 @@ class ILSLateralDistance(DerivedParameterNode):
 
             try:
                 start_2_loc = runway_distances(runway)[0]
-                hw = ut.convert(runway['strip']['width'] / 2.0, ut.FT, ut.METER)
+                hw = ut.convert(runway['width'] / 2.0, ut.FT, ut.METER)
             except (KeyError, TypeError):
                 self.warning('Unknown runway width or localizer coordinates')
                 continue

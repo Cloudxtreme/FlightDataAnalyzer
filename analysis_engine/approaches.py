@@ -51,13 +51,13 @@ from flightdatautilities.numpy_utils import slices_int
 def is_heliport(ac_type, airport, landing_runway):
     '''
     helicopter and no airport
-    helicopter and runway strip length == 0
-    no runway and one strip with length == 0
+    helicopter and runway length == 0
+    no runway and one with length == 0
     '''
     if ac_type == aeroplane:
         return False # Aeroplane does not land on heliport
-    if landing_runway: # heliport entered as runway with 0 length strip
-        return landing_runway.get('strip', {}).get('length') == 0
+    if landing_runway: # heliport entered as runway with 0 length
+        return landing_runway.get('length') == 0
     else:
         # I've landed in a field or on a ship or not using a runway.
         return True
