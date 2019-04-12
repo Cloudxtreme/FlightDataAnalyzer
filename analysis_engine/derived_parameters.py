@@ -6421,12 +6421,19 @@ class Headwind(DerivedParameterNode):
 
     @classmethod
     def can_operate(cls, available):
-        return all_of((
+        wind_based = all_of((
             'Wind Speed',
             'Wind Direction',
             'Heading True',
             'Altitude AAL',
         ), available)
+
+        aspd_based = all_of((
+            'Airspeed True',
+            'Groundspeed'
+        ), available)
+
+        return wind_based or aspd_based
 
     def derive(self, aspd=P('Airspeed True'),
                windspeed=P('Wind Speed'),
@@ -6435,24 +6442,35 @@ class Headwind(DerivedParameterNode):
                alt_aal=P('Altitude AAL'),
                gspd=P('Groundspeed')):
 
+        if all((windspeed, wind_dir, head, alt_aal)):
+            # Wind based
+            if aspd:
+                # mask windspeed data while going slow
+                windspeed.array[aspd.array.mask] = np.ma.masked
+            rad_scale = radians(1.0)
+            headwind = windspeed.array * np.ma.cos((wind_dir.array-head.array)*rad_scale)
 
+            # If we have airspeed and groundspeed, overwrite the values for the
+            # altitudes below one hundred feet.
+            if aspd and gspd:
+                for below_100ft in alt_aal.slices_below(100):
+                    try:
+                        headwind[below_100ft] = moving_average((aspd.array[below_100ft] - gspd.array[below_100ft]),
+                                                               window=5)
+                    except:
+                        pass # Leave the data unchanged as one of the parameters is fully masked.
+            self.array = headwind
 
-        if aspd:
-            # mask windspeed data while going slow
-            windspeed.array[aspd.array.mask] = np.ma.masked
-        rad_scale = radians(1.0)
-        headwind = windspeed.array * np.ma.cos((wind_dir.array-head.array)*rad_scale)
+        else:
+            # Airspeed based
+            try:
+                headwind = moving_average((aspd.array - gspd.array),
+                                          window=5)
+            except ValueError:
+                # one of the parameters is fully masked.
+                headwind = np_ma_masked_zeros_like(aspd.array)
 
-        # If we have airspeed and groundspeed, overwrite the values for the
-        # altitudes below one hundred feet.
-        if aspd and gspd:
-            for below_100ft in alt_aal.slices_below(100):
-                try:
-                    headwind[below_100ft] = moving_average((aspd.array[below_100ft] - gspd.array[below_100ft]),
-                                                           window=5)
-                except:
-                    pass # Leave the data unchanged as one of the parameters is fully masked.
-        self.array = headwind
+            self.array = headwind
 
 
 class Tailwind(DerivedParameterNode):

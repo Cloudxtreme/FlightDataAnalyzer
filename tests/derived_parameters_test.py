@@ -1709,35 +1709,35 @@ class TestAltitudeRadio(unittest.TestCase):
         for sect in sects[2::3]:
             # landings
             self.assertAlmostEqual(rad.array[sect.stop - 1] / 10., 0, 0)
-    
+
     def test_altitude_radio_A320_zero_dropouts(self):
-        # Four cases of data dropout at around 700ft in the descent. If the 
-        # dropout is not handled correctly, the preceding data is much lower, 
+        # Four cases of data dropout at around 700ft in the descent. If the
+        # dropout is not handled correctly, the preceding data is much lower,
         # hence fails the simple > 500ft test.
         fast = S(frequency=8.0,
-                 items=[Section('Fast', slice(1989, 29393), 1989, 29393)])        
+                 items=[Section('Fast', slice(1989, 29393), 1989, 29393)])
         radioA = load_compressed(os.path.join(
             test_data_path, 'A320_F_Altitude_Radio_(A)_dropout.npz'))
         radioA = overflow_correction(radioA)
         self.assertGreater(radioA[28527], 500.0)
-        
+
         radioB = load_compressed(os.path.join(
             test_data_path, 'A320_F_Altitude_Radio_(B)_dropout.npz'))
         radioB = overflow_correction(radioB)
         self.assertGreater(radioB[28527], 500.0)
-        
+
         fast = S(frequency=8.0,
-                 items=[Section('Fast', slice(1281, 63613), 1281, 63613)])        
+                 items=[Section('Fast', slice(1281, 63613), 1281, 63613)])
         radioA = load_compressed(os.path.join(
             test_data_path, 'A320_K_Altitude_Radio_(A)_dropout.npz'))
         radioA = overflow_correction(radioA)
         self.assertGreater(radioA[62710], 500.0)
-        
+
         radioB = load_compressed(os.path.join(
             test_data_path, 'A320_K_Altitude_Radio_(B)_dropout.npz'))
         radioB = overflow_correction(radioB)
         self.assertGreater(radioB[62710], 500.0)
-        
+
     def test_altitude_radio_A320_small_jumps(self):
         # Some small jumps on a few aircraft caused problems.
         fast = buildsection('Fast', 248.8, 3674.3)
@@ -4189,20 +4189,19 @@ class TestMach(unittest.TestCase):
 
 class TestHeadwind(unittest.TestCase):
     def test_can_operate(self):
-        opts = Headwind.get_operational_combinations()
-        self.assertEqual(opts, [
-            ('Wind Speed', 'Wind Direction', 'Heading True', 'Altitude AAL'),
-            ('Airspeed True', 'Wind Speed', 'Wind Direction', 'Heading True', 'Altitude AAL'),
-            ('Wind Speed', 'Wind Direction', 'Heading True', 'Altitude AAL', 'Groundspeed'),
-            ('Airspeed True', 'Wind Speed', 'Wind Direction', 'Heading True', 'Altitude AAL', 'Groundspeed'),
-        ])
+        opts = [set(opt) for opt in Headwind.get_operational_combinations()]
+        wind_based = {'Wind Speed', 'Wind Direction', 'Heading True', 'Altitude AAL'}
+        aspd_based = {'Airspeed True', 'Groundspeed'}
+        for opt in opts:
+            self.assertTrue(wind_based.issubset(opt) or aspd_based.issubset(opt))
 
     def test_real_example(self):
         ws = P('Wind Speed', np.ma.array([84.0,]))
         wd = P('Wind Direction', np.ma.array([350]))
-        head=P('Heading True', np.ma.array([50]))
+        head = P('Heading True', np.ma.array([50]))
+        alt_aal = P('Altitude AAL', np.ma.ones(5) * 2000)
         hw = Headwind()
-        hw.derive(None, ws, wd, head, None, None)
+        hw.derive(None, ws, wd, head, alt_aal, None)
         expected = np.ma.array([42.])
         ma_test.assert_masked_array_almost_equal(hw.array, expected)
 
@@ -4212,8 +4211,9 @@ class TestHeadwind(unittest.TestCase):
         # nice, round values from cos()
         wd = P('Wind Direction', np.ma.array([340, 270, 270, 350, 5], dtype=float))
         head=P('Heading True', np.ma.array([340, 90, 210, 50, 245], dtype=float))
+        alt_all = P('Altitude AAL', np.ma.ones(5) * 2000)
         hw = Headwind()
-        hw.derive(None, ws, wd, head, None, None)
+        hw.derive(None, ws, wd, head, alt_all, None)
         ma_test.assert_masked_array_almost_equal (hw.array, np.ma.array([20, -20, 10, 10, -10]))
 
     def test_headwind_below_100ft(self):
@@ -4235,6 +4235,20 @@ class TestHeadwind(unittest.TestCase):
         np.testing.assert_equal(hw.array[10:30], np.ones(20) * -20)
         # below 100ft
         np.testing.assert_equal(hw.array[30:], np.ones(10) * -40)
+
+    def test_no_wind_parameters(self):
+        # create a 40 kt difference between Airspeed and speed over ground
+        gspd = P('Groundspeed', np.ma.ones(20) * 220)
+        idx = 4
+        gspd.array[idx] = 200.0
+        aspd = P('Airpseed True', np.ma.ones(20) * 180.0)
+
+        hw = Headwind()
+        hw.derive(aspd, None, None, None, None, gspd)
+
+        expected = np.ones(20) * -40
+        expected[idx - 2 : idx + 3] += 20 / 5
+        np.testing.assert_equal(hw.array, expected)
 
 
 class TestWindAcrossLandingRunway(unittest.TestCase):
