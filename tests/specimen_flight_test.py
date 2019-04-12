@@ -119,12 +119,9 @@ class TestProcessSpecimenFlight(unittest.TestCase):
                     'longitude': 11.091397,
                 },
                 'magnetic_heading': 13.7,
-                'strip': {
-                    'id': 4076,
-                    'length': 11811,
-                    'surface': 'ASP',
-                    'width': 147,
-                },
+                'length': 11811,
+                'surface': 'ASP',
+                'width': 147,
                 'localizer': {
                     'beam_width': 4.5,
                     'elevation': 686,
@@ -194,12 +191,9 @@ class TestProcessSpecimenFlight(unittest.TestCase):
                     'latitude': 58.196703,
                     'longitude': 8.075406,
                 },
-                'strip': {
-                    'id': 4064,
-                    'length': 6660,
-                    'surface': 'ASP',
-                    'width': 147,
-                },
+                'length': 6660,
+                'surface': 'ASP',
+                'width': 147,
             }),
             Attribute('FDR Landing Airport', {
                 'code': {'iata': 'OSL', 'icao': 'ENGM'},
