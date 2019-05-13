@@ -38,7 +38,7 @@ NODE_HELICOPTER_MODULE_PATHS = [
     'analysis_engine.helicopter.derived_parameters',
     'analysis_engine.helicopter.multistate_parameters',
     'analysis_engine.helicopter.key_point_values',
-    #'analysis_engine.helicopter.key_time_instances',
+    'analysis_engine.helicopter.key_time_instances',
     #'analysis_engine.helicopter.flight_attribute',
     'analysis_engine.helicopter.flight_phase',
 ]
@@ -296,7 +296,7 @@ HOLDING_MIN_TIME = 5*60  #sec
 # Maximum groundspeed over the period in the hold. This segregates true
 # holds, where the effective speed is significantly reduced (that's the point
 # of the hold), from curving departures or approaches.
-HOLDING_MAX_GSPD = 60.0  # kts
+HOLDING_MAX_GSPD = 90.0  # kts
 
 # Threshold for flight phase altitude hysteresis.
 HYSTERESIS_FPALT = 200  # ft
@@ -439,7 +439,7 @@ HEADING_RATE_FOR_FLIGHT_PHASES_FW = 2.0  # deg per second
 HEADING_RATE_FOR_FLIGHT_PHASES_RW = 10.0  # deg per second
 
 # Heading Rate limit for taxi event.
-HEADING_RATE_FOR_TAXI_TURNS = 5.0  # deg per second
+HEADING_RATE_FOR_TAXI_TURNS = 3.0  # deg per second
 
 # Duration of masked data to repair by interpolation for flight phase analysis
 REPAIR_DURATION = 10  # seconds

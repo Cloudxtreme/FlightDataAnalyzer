@@ -37,17 +37,21 @@ class TestApproachInformation(unittest.TestCase):
         self.gatwick = [airports['gatwick']]
 
     def test_can_operate(self):
-        self.assertTrue(ApproachInformation.can_operate(
+        self.assertFalse(ApproachInformation.can_operate(
             ('Approach And Landing', 'Altitude AAL'), ac_type=aeroplane))
         self.assertTrue(ApproachInformation.can_operate(
-            ('Approach And Landing', 'Altitude AGL'), ac_type=helicopter))
+            ('Approach And Landing', 'Altitude AAL', 'Takeoff', 'Touchdown'), ac_type=aeroplane))
         self.assertTrue(ApproachInformation.can_operate(
-            ('Approach And Landing', 'Altitude AAL',
-             'Latitude Prepared', 'Longitude Prepared'), ac_type=aeroplane))
+            ('Approach And Landing', 'Altitude AGL', 'Takeoff', 'Touchdown'), ac_type=helicopter))
+        self.assertTrue(ApproachInformation.can_operate(
+            ('Approach And Landing', 'Altitude AAL', 'Latitude Prepared', 'Longitude Prepared',
+             'Takeoff', 'Touchdown'), ac_type=aeroplane))
         self.assertFalse(ApproachInformation.can_operate(
-            ('Approach And Landing', 'Altitude AAL', 'Latitude Prepared'), ac_type=aeroplane))
+            ('Approach And Landing', 'Altitude AAL', 'Latitude Prepared', 'Takeoff', 'Touchdown'),
+            ac_type=aeroplane))
         self.assertFalse(ApproachInformation.can_operate(
-            ('Approach And Landing', 'Altitude AAL', 'Longitude Prepared'), ac_type=aeroplane))
+            ('Approach And Landing', 'Altitude AAL', 'Longitude Prepared', 'Takeoff', 'Touchdown'),
+            ac_type=aeroplane))
 
     @patch('analysis_engine.approaches.api')
     def test_ils_localizer_established_basic(self, api):
@@ -73,9 +77,9 @@ class TestApproachInformation(unittest.TestCase):
                           KPV('Longitude At Touchdown', items=[KeyPointValue(index=19, value=-0.19, name='Longitude At Touchdown')]),
                           A('Precise Positioning', True),
                           S(items=[Section('Fast', slice(10,90), 10, 90)]),
-                          None, None, None, None, None, None, None, 
-                          KTI('Touchdown', items=[KeyTimeInstance(index=19)]), 
-                          None, 
+                          None, None, None, None, None, None, None,
+                          KTI('Touchdown', items=[KeyTimeInstance(index=19)]),
+                          None,
                           S(items=[Section('Takeoff', slice(1,10), 1, 10)]))
         get_handler.get_nearest_airport.assert_called_with(latitude=51.145, longitude=-0.19)
         self.assertEqual(approaches[0].loc_est, slice(41, 100))
@@ -534,7 +538,7 @@ class TestApproachInformation(unittest.TestCase):
 
     @patch('analysis_engine.approaches.api')
     def test_landing_turn_off_runway_curved(self, api):
-        
+
         get_handler = Mock()
         get_handler.get_nearest_airport.side_effect = api.NotFoundError()
         get_handler.get_airport.return_value = self.gatwick[0]
@@ -562,7 +566,7 @@ class TestApproachInformation(unittest.TestCase):
 
     @patch('analysis_engine.approaches.api')
     def test_landing_turn_off_runway_curved_left(self, api):
-        
+
         get_handler = Mock()
         get_handler.get_nearest_airport.side_effect = api.NotFoundError()
         get_handler.get_airport.return_value = self.gatwick[0]
@@ -709,7 +713,7 @@ class TestCloseAirprots(unittest.TestCase):
 
 
 class TestAlicante(unittest.TestCase):
-    
+
     # There is no ILS from this direction.
     @patch('analysis_engine.approaches.api')
     def test_no_ils(self, api):
@@ -731,10 +735,10 @@ class TestAlicante(unittest.TestCase):
         approaches.derive(fetch('Altitude AAL'),
                           fetch('Altitude AGL'),
                           A('Aircraft Type', 'aeroplane'),
-                          S(name='Approach And Landing', 
-                            items=[Section(name='Approach And Landing', 
+                          S(name='Approach And Landing',
+                            items=[Section(name='Approach And Landing',
                                            slice=slice(app_start, app_end),
-                                           start_edge=app_start, 
+                                           start_edge=app_start,
                                            stop_edge=app_end)]),
                           fetch('Heading Continuous'),
                           fetch('Latitude Prepared'),
@@ -751,7 +755,7 @@ class TestAlicante(unittest.TestCase):
         self.assertEqual(approaches[0].landing_runway['identifier'], '28')
         self.assertEqual(approaches[0].gs_est, None)
         self.assertEqual(approaches[0].loc_est, None)
-        
+
 
 class TestBardufoss(unittest.TestCase):
 
@@ -766,19 +770,19 @@ class TestBardufoss(unittest.TestCase):
             try:
                 return load(root + par_name + '.nod')
             except:
-                return None 
+                return None
         root = os.path.join(approaches_path, 'ILS_test_9928419_')
         app_start = 11352
-        app_end = 11800  
+        app_end = 11800
 
         approaches = ApproachInformation()
         approaches.derive(fetch('Altitude AAL'),
                           fetch('Altitude AGL'),
                           A('Aircraft Type', 'aeroplane'),
-                          S(name='Approach And Landing', 
-                            items=[Section(name='Approach And Landing', 
+                          S(name='Approach And Landing',
+                            items=[Section(name='Approach And Landing',
                                            slice=slice(app_start, app_end),
-                                           start_edge=app_start, 
+                                           start_edge=app_start,
                                            stop_edge=app_end)]),
                           fetch('Heading Continuous'),
                           fetch('Latitude Prepared'),
@@ -793,7 +797,7 @@ class TestBardufoss(unittest.TestCase):
                           A('Precise Positioning', True))
         self.assertEqual(approaches[0].airport['name'], 'Bardufoss')
         self.assertEqual(approaches[0].landing_runway['identifier'], '10')
-        # The aircraft was never established on the glidepath 
+        # The aircraft was never established on the glidepath
         # (started OK, but went outside 0.5 dots within 10 seconds of acquiring the localizer).
         self.assertEqual(approaches[0].gs_est, None)
         # ...but was on the localizer
@@ -814,7 +818,7 @@ class TestBodo(unittest.TestCase):
             try:
                 return load(root + par_name + '.nod')
             except:
-                return None 
+                return None
         root = os.path.join(approaches_path, 'ILS_test_10076024_')
         app_start = 8780
         app_end = 8861
@@ -823,10 +827,10 @@ class TestBodo(unittest.TestCase):
         approaches.derive(fetch('Altitude AAL'),
                           fetch('Altitude AGL'),
                           A('Aircraft Type', 'aeroplane'),
-                          S(name='Approach And Landing', 
-                            items=[Section(name='Approach And Landing', 
+                          S(name='Approach And Landing',
+                            items=[Section(name='Approach And Landing',
                                            slice=slice(app_start, app_end),
-                                           start_edge=app_start, 
+                                           start_edge=app_start,
                                            stop_edge=app_end)]),
                           fetch('Heading Continuous'),
                           fetch('Latitude Prepared'),
@@ -841,7 +845,7 @@ class TestBodo(unittest.TestCase):
                           A('Precise Positioning', True))
         self.assertEqual(approaches[0].airport['name'], 'Bodo')
         self.assertEqual(approaches[0].landing_runway['identifier'], '25')
-        # The aircraft was never established on the glidepath 
+        # The aircraft was never established on the glidepath
         # (started OK, but went outside 0.5 dots within 10 seconds of acquiring the localizer).
         self.assertEqual(approaches[0].gs_est, None)
         # ...but was on the localizer
@@ -850,7 +854,7 @@ class TestBodo(unittest.TestCase):
 
 
 class TestChania(unittest.TestCase):
-    
+
     # There is no ILS from this direction.
     @patch('analysis_engine.approaches.api')
     def test_no_ils(self, api):
@@ -872,10 +876,10 @@ class TestChania(unittest.TestCase):
         approaches.derive(fetch('Altitude AAL'),
                           fetch('Altitude AGL'),
                           A('Aircraft Type', 'aeroplane'),
-                          S(name='Approach And Landing', 
-                            items=[Section(name='Approach And Landing', 
+                          S(name='Approach And Landing',
+                            items=[Section(name='Approach And Landing',
                                            slice=slice(app_start, app_end),
-                                           start_edge=app_start, 
+                                           start_edge=app_start,
                                            stop_edge=app_end)]),
                           fetch('Heading Continuous'),
                           fetch('Latitude Prepared'),
@@ -896,7 +900,7 @@ class TestChania(unittest.TestCase):
 
 
 class TestDallasFortWorth(unittest.TestCase):
-    
+
     # A change in runways late on the approach.
     @patch('analysis_engine.approaches.api')
     def test_runway_change_at_DFW(self, api):
@@ -918,10 +922,10 @@ class TestDallasFortWorth(unittest.TestCase):
         approaches.derive(fetch('Altitude AAL'),
                           fetch('Altitude AGL'),
                           A('Aircraft Type', 'aeroplane'),
-                          S(name='Approach And Landing', 
-                            items=[Section(name='Approach And Landing', 
+                          S(name='Approach And Landing',
+                            items=[Section(name='Approach And Landing',
                                            slice=slice(app_start, app_end),
-                                           start_edge=app_start, 
+                                           start_edge=app_start,
                                            stop_edge=app_end)]),
                           fetch('Heading Continuous'),
                           fetch('Latitude Prepared'),
@@ -949,7 +953,7 @@ class TestDallasFortWorth(unittest.TestCase):
 
 
 class TestFortWorth(unittest.TestCase):
-    
+
     # This is the Fort Worth that it NOT at Dallas !!!
     @patch('analysis_engine.approaches.api')
     def test_ils_corrected_data(self, api):
@@ -965,16 +969,16 @@ class TestFortWorth(unittest.TestCase):
                 return None
         root = os.path.join(approaches_path, 'ILS_test_9094175_')
         app_start = 17834
-        app_end = 18218     
+        app_end = 18218
 
         approaches = ApproachInformation()
         approaches.derive(fetch('Altitude AAL'),
                           fetch('Altitude AGL'),
                           A('Aircraft Type', 'aeroplane'),
-                          S(name='Approach And Landing', 
-                            items=[Section(name='Approach And Landing', 
+                          S(name='Approach And Landing',
+                            items=[Section(name='Approach And Landing',
                                            slice=slice(app_start, app_end),
-                                           start_edge=app_start, 
+                                           start_edge=app_start,
                                            stop_edge=app_end)]),
                           fetch('Heading Continuous'),
                           fetch('Latitude Prepared'),
@@ -998,7 +1002,7 @@ class TestFortWorth(unittest.TestCase):
 
 
 class TestHerat(unittest.TestCase):
-    
+
     # This aircraft does not record latitude and longitude
     @patch('analysis_engine.approaches.api')
     def test_no_ils_but_signal_looks_ok(self, api):
@@ -1015,16 +1019,16 @@ class TestHerat(unittest.TestCase):
                 return None
         root = os.path.join(approaches_path, 'ILS_test_10411379_')
         app_start = 10792.6
-        app_end = 11329.0    
+        app_end = 11329.0
 
         approaches = ApproachInformation()
         approaches.derive(fetch('Altitude AAL'),
                           fetch('Altitude AGL'),
                           A('Aircraft Type', 'aeroplane'),
-                          S(name='Approach And Landing', 
-                            items=[Section(name='Approach And Landing', 
+                          S(name='Approach And Landing',
+                            items=[Section(name='Approach And Landing',
                                            slice=slice(app_start, app_end),
-                                           start_edge=app_start, 
+                                           start_edge=app_start,
                                            stop_edge=app_end)]),
                           fetch('Heading Continuous'),
                           fetch('Latitude Prepared'),
@@ -1045,7 +1049,7 @@ class TestHerat(unittest.TestCase):
 
 
 class TestKirkenes(unittest.TestCase):
-    
+
     # There is an ILS on the reverse runway, not on this approach.
     @patch('analysis_engine.approaches.api')
     def test_ils_on_reciprocal_runway(self, api):
@@ -1061,16 +1065,16 @@ class TestKirkenes(unittest.TestCase):
                 return None
         root = os.path.join(approaches_path, 'ILS_test_10066360_')
         app_start = 13803.5
-        app_end = 14246.0    
+        app_end = 14246.0
 
         approaches = ApproachInformation()
         approaches.derive(fetch('Altitude AAL'),
                           fetch('Altitude AGL'),
                           A('Aircraft Type', 'aeroplane'),
-                          S(name='Approach And Landing', 
-                            items=[Section(name='Approach And Landing', 
+                          S(name='Approach And Landing',
+                            items=[Section(name='Approach And Landing',
                                            slice=slice(app_start, app_end),
-                                           start_edge=app_start, 
+                                           start_edge=app_start,
                                            stop_edge=app_end)]),
                           fetch('Heading Continuous'),
                           fetch('Latitude Prepared'),
@@ -1089,10 +1093,10 @@ class TestKirkenes(unittest.TestCase):
         self.assertEqual(approaches[0].gs_est, None)
         self.assertEqual(approaches[0].loc_est, None)
         self.assertEqual(approaches[0].ils_freq, None)
-        
-        
+
+
 class TestScatsta(unittest.TestCase):
-    
+
     # This airport has a localizer but no glideslope antenna
     @patch('analysis_engine.approaches.api')
     def test_no_ils_glidepath(self, api):
@@ -1108,16 +1112,16 @@ class TestScatsta(unittest.TestCase):
                 return None
         root = os.path.join(approaches_path, 'ILS_test_10174453_')
         app_start = 6996.0
-        app_end = 7327.0  
+        app_end = 7327.0
 
         approaches = ApproachInformation()
         approaches.derive(fetch('Altitude AAL'),
                           fetch('Altitude AGL'),
                           A('Aircraft Type', 'aeroplane'),
-                          S(name='Approach And Landing', 
-                            items=[Section(name='Approach And Landing', 
+                          S(name='Approach And Landing',
+                            items=[Section(name='Approach And Landing',
                                            slice=slice(app_start, app_end),
-                                           start_edge=app_start, 
+                                           start_edge=app_start,
                                            stop_edge=app_end)]),
                           fetch('Heading Continuous'),
                           fetch('Latitude Prepared'),
@@ -1137,10 +1141,10 @@ class TestScatsta(unittest.TestCase):
         self.assertEqual(int(approaches[0].loc_est.stop), 7086)
         # ...but there is no glideslope on this runway.
         self.assertEqual(approaches[0].gs_est, None)
-        
-        
+
+
 class TestSirSeretseKhama(unittest.TestCase):
-    
+
     # Note: This aircraft does not have a recorded ILS Frequency
     @patch('analysis_engine.approaches.api')
     def test_late_turn_and_glideslope_established(self, api):
@@ -1157,15 +1161,15 @@ class TestSirSeretseKhama(unittest.TestCase):
         root = os.path.join(approaches_path, 'ILS_test_10089954_')
         app_start = 8256
         app_end = 8942
-        
+
         approaches = ApproachInformation()
         approaches.derive(fetch('Altitude AAL'),
                           fetch('Altitude AGL'),
                           A('Aircraft Type', 'aeroplane'),
-                          S(name='Approach And Landing', 
-                            items=[Section(name='Approach And Landing', 
+                          S(name='Approach And Landing',
+                            items=[Section(name='Approach And Landing',
                                            slice=slice(app_start, app_end),
-                                           start_edge=app_start, 
+                                           start_edge=app_start,
                                            stop_edge=app_end)]),
                           fetch('Heading Continuous'),
                           fetch('Latitude Prepared'),
@@ -1188,11 +1192,11 @@ class TestSirSeretseKhama(unittest.TestCase):
         self.assertEqual(int(approaches[0].loc_est.start), 8679)
         self.assertEqual(int(approaches[0].loc_est.stop), app_end)
 
-    
+
 class TestSplit(unittest.TestCase):
-    
+
     # This flight gave an erroneous smoothed track when originally processed.
-    # (The go-around was not aligned to the runway while the landing was). 
+    # (The go-around was not aligned to the runway while the landing was).
     @patch('analysis_engine.approaches.api')
     def test_ga_at_split(self, api):
 
@@ -1213,11 +1217,11 @@ class TestSplit(unittest.TestCase):
                           S(name='Approach And Landing',
                             items=[Section(name='Approach And Landing',
                                            slice=slice(19951, 20518),
-                                           start_edge=19951, 
+                                           start_edge=19951,
                                            stop_edge=20518),
                                    Section(name='Approach And Landing',
                                            slice=slice(20876, 21470),
-                                           start_edge=20876, 
+                                           start_edge=20876,
                                            stop_edge=21470),
                                    ]),
                           fetch('Heading Continuous'),
@@ -1235,10 +1239,10 @@ class TestSplit(unittest.TestCase):
         self.assertEqual(approaches[0].landing_runway['identifier'], '23')
         self.assertEqual(approaches[1].airport['name'], 'Split')
         self.assertEqual(approaches[1].landing_runway['identifier'], '23')
-        
+
 
 class TestWashingtonNational(unittest.TestCase):
-    
+
     # This runway has a huge offset to the ILS - 40deg!
     @patch('analysis_engine.approaches.api')
     def test_huge_offset(self, api):
@@ -1255,15 +1259,15 @@ class TestWashingtonNational(unittest.TestCase):
         root = os.path.join(approaches_path, 'ILS_test_10260422_')
         app_start = 8284
         app_end = 8832
-        
+
         approaches = ApproachInformation()
         approaches.derive(fetch('Altitude AAL'),
                           fetch('Altitude AGL'),
                           A('Aircraft Type', 'aeroplane'),
-                          S(name='Approach And Landing', 
-                            items=[Section(name='Approach And Landing', 
+                          S(name='Approach And Landing',
+                            items=[Section(name='Approach And Landing',
                                            slice=slice(app_start, app_end),
-                                           start_edge=app_start, 
+                                           start_edge=app_start,
                                            stop_edge=app_end)]),
                           fetch('Heading Continuous'),
                           fetch('Latitude Prepared'),
@@ -1287,7 +1291,7 @@ class TestWashingtonNational(unittest.TestCase):
 
 
 class TestZaventem(unittest.TestCase):
-    
+
     # This was a go-around and landing.
     @patch('analysis_engine.approaches.api')
     def test_go_around_and_landing(self, api):
@@ -1304,16 +1308,16 @@ class TestZaventem(unittest.TestCase):
         root = os.path.join(approaches_path, 'ILS_test_10180313_')
         app_start = 11754
         app_end = 12346
-        
+
         approaches = ApproachInformation()
         approaches.derive(fetch('Altitude AAL'),
                           fetch('Altitude AGL'),
                           A('Aircraft Type', 'aeroplane'),
-                          S(name='Approach And Landing', 
-                            items=[Section(name='Approach And Landing', 
+                          S(name='Approach And Landing',
+                            items=[Section(name='Approach And Landing',
                                            slice=slice(app_start, app_end),
                                            start_edge=app_start, stop_edge=app_end),
-                                   Section(name='Approach And Landing', 
+                                   Section(name='Approach And Landing',
                                            slice=slice(13500, 13898),
                                            start_edge=13500, stop_edge=13898)]),
                           fetch('Heading Continuous'),
@@ -1364,14 +1368,14 @@ class TestBarcelona(unittest.TestCase):
         approaches.derive(fetch('Altitude AAL'),
                           fetch('Altitude AGL'),
                           A('Aircraft Type', 'aeroplane'),
-                          S(name='Approach And Landing', 
-                            items=[Section(name='Approach And Landing', 
+                          S(name='Approach And Landing',
+                            items=[Section(name='Approach And Landing',
                                            slice=slice(18919, 19340),
-                                           start_edge=18919, 
+                                           start_edge=18919,
                                            stop_edge=19340),
-                            Section(name='Approach And Landing', 
+                            Section(name='Approach And Landing',
                                     slice=slice(20826, 21386),
-                                    start_edge=20826, 
+                                    start_edge=20826,
                                     stop_edge=21386)]),
                           fetch('Heading Continuous'),
                           fetch('Latitude Prepared'),
@@ -1433,10 +1437,10 @@ class TestNice(unittest.TestCase):
         approaches.derive(fetch('Altitude AAL'),
                           fetch('Altitude AGL'),
                           A('Aircraft Type', 'aeroplane'),
-                          S(name='Approach And Landing', 
-                            items=[Section(name='Approach And Landing', 
+                          S(name='Approach And Landing',
+                            items=[Section(name='Approach And Landing',
                                            slice=slice(app_start, app_end),
-                                           start_edge=app_start, 
+                                           start_edge=app_start,
                                            stop_edge=app_end)]),
                           fetch('Heading Continuous'),
                           fetch('Latitude Prepared'),
@@ -1487,10 +1491,10 @@ class TestGranCanaria(unittest.TestCase):
         approaches.derive(fetch('Altitude AAL'),
                           fetch('Altitude AGL'),
                           A('Aircraft Type', 'aeroplane'),
-                          S(name='Approach And Landing', 
-                            items=[Section(name='Approach And Landing', 
+                          S(name='Approach And Landing',
+                            items=[Section(name='Approach And Landing',
                                            slice=slice(app_start, app_end),
-                                           start_edge=app_start, 
+                                           start_edge=app_start,
                                            stop_edge=app_end)]),
                           fetch('Heading Continuous'),
                           fetch('Latitude Prepared'),
@@ -1541,10 +1545,10 @@ class TestMunich(unittest.TestCase):
         approaches.derive(fetch('Altitude AAL'),
                           fetch('Altitude AGL'),
                           A('Aircraft Type', 'aeroplane'),
-                          S(name='Approach And Landing', 
-                            items=[Section(name='Approach And Landing', 
+                          S(name='Approach And Landing',
+                            items=[Section(name='Approach And Landing',
                                            slice=slice(app_start, app_end),
-                                           start_edge=app_start, 
+                                           start_edge=app_start,
                                            stop_edge=app_end)]),
                           fetch('Heading Continuous'),
                           fetch('Latitude Prepared'),
@@ -1601,10 +1605,10 @@ class TestNewDelhi(unittest.TestCase):
         approaches.derive(fetch('Altitude AAL'),
                           fetch('Altitude AGL'),
                           A('Aircraft Type', 'aeroplane'),
-                          S(name='Approach And Landing', 
-                            items=[Section(name='Approach And Landing', 
+                          S(name='Approach And Landing',
+                            items=[Section(name='Approach And Landing',
                                            slice=slice(app_start, app_end),
-                                           start_edge=app_start, 
+                                           start_edge=app_start,
                                            stop_edge=app_end)]),
                           fetch('Heading Continuous'),
                           fetch('Latitude Prepared'),
@@ -1654,9 +1658,9 @@ class TestPalmaDeMallorca(unittest.TestCase):
                           A('Aircraft Type', 'aeroplane'),
                           S(name='Approach And Landing',
                             frequency=2.0,
-                            items=[Section(name='Approach And Landing', 
+                            items=[Section(name='Approach And Landing',
                                            slice=slice(app_start, app_end),
-                                           start_edge=app_start, 
+                                           start_edge=app_start,
                                            stop_edge=app_end)]),
                           fetch('Heading Continuous'),
                           fetch('Latitude Prepared'),

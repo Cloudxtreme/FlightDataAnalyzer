@@ -23,6 +23,7 @@ from analysis_engine.library import (
 )
 
 from analysis_engine.multistate_parameters import (
+    AOAAbnormalOperation,
     APEngaged,
     APChannelsEngaged,
     APLateralMode,
@@ -152,6 +153,97 @@ class NodeTest(object):
 
         return params, phase
 
+
+class TestAOAAbnormalOperation(unittest.TestCase, NodeTest):
+
+    def setUp(self):
+        self.node_class = AOAAbnormalOperation
+
+    def test_can_operate(self):
+        self.assertTrue(self.node_class.can_operate(['AOA (R) Failure']))
+        self.assertTrue(self.node_class.can_operate(['AOA (R) Failure', 'AOA Secondary Heater']))
+        self.assertTrue(self.node_class.can_operate([
+            'AOA (L) Failure',
+            'AOA (L) Signal Failure',
+            'AOA (L) Primary Heater',
+            'AOA (R) Failure',
+            'AOA (R) Signal Failure',
+            'AOA (R) Primary Heater',
+            'AOA Signal Failure',
+            'AOA Secondary Heater',
+            'AOA Correction Program',
+        ]))
+
+    def test_derive_single(self):
+        val_mapping = {
+            0: '-',
+            1: 'Failed',
+        }
+        l_failure = M('AOA (L) Failure', array=np.ma.array(([0]*7 + [1] + [0]*2)), values_mapping=val_mapping)
+        node = self.node_class()
+        node.derive(l_failure, None, None, None, None, None, None, None, None)
+        self.assertTrue(all(node.array == ['-', '-', '-', '-', '-', '-', '-', 'AOA (L) Failure', '-', '-']))
+
+    def test_derive_all(self):
+        failed_values_mapping = {0: '-', 1: 'Failed'}
+        on_values_mapping = {0: 'On', 1: '-'}
+        aoa_l = M(
+            'AOA (L) Failure',
+            array=np.ma.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+            values_mapping=failed_values_mapping,
+        )
+        aoa_l_signal = M(
+            'AOA (L) Signal Failure',
+            array=np.ma.array([0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+            values_mapping=failed_values_mapping,
+        )
+        aoa_l_heater = M(
+            'AOA (L) Primary Heater',
+            array=np.ma.array([0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+            values_mapping=on_values_mapping,
+        )
+        aoa_r = M(
+            'AOA (R) Failure',
+            array=np.ma.array([0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+            values_mapping=failed_values_mapping,
+        )
+        aoa_r_signal = M(
+            'AOA (R) Signal Failure',
+            array=np.ma.array([0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+            values_mapping=failed_values_mapping,
+        )
+        aoa_r_heater = M(
+            'AOA (R) Primary Heater',
+            array=np.ma.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+            values_mapping=on_values_mapping,
+        )
+        aoa_signal_fail = M(
+            'AOA Signal Failure',
+            array=np.ma.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+            values_mapping=failed_values_mapping,
+        )
+        aoa_secondary_heater = M(
+            'AOA Secondary Heater',
+            array=np.ma.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+            values_mapping=on_values_mapping,
+        )
+        aoa_correction = M(
+            'AOA Correction Program',
+            array=np.ma.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+            values_mapping={0: '-', 1:'Yes'},
+        )
+
+        node=self.node_class()
+        node.derive(aoa_l, aoa_l_signal, aoa_l_heater, aoa_r, aoa_r_signal,
+                    aoa_r_heater, aoa_signal_fail, aoa_secondary_heater, aoa_correction)
+        self.assertTrue(all(node.array == ['-', '-', 'AOA (L) Signal Failure', 'AOA (L) Signal Failure',
+                                           'AOA (L) Primary Heater', 'AOA (L) Primary Heater', 'AOA (R) Failure',
+                                           'AOA (R) Failure', 'AOA (R) Signal Failure', 'AOA (R) Signal Failure',
+                                           'AOA (L) Failure', 'AOA (L) Failure', 'AOA (R) Primary Heater',
+                                           'AOA (R) Primary Heater', 'AOA Signal Failure', 'AOA Signal Failure',
+                                           'AOA Secondary Heater', 'AOA Secondary Heater', '-', '-',
+                                           'AOA Correction Program', 'AOA Correction Program', '-', '-', '-', '-', '-', '-',
+                                           '-', '-', '-', '-', '-', '-']))
 
 
 class TestAPLateralMode(unittest.TestCase):
@@ -827,8 +919,6 @@ class TestDualInput(unittest.TestCase, NodeTest):
         np.testing.assert_array_equal(node.array, expected_array)
 
     def test_not_triggered_at_minimum_resolution(self):
-        pilot_array = MappedArray([1] * 20,
-                                  values_mapping=self.pilot_map)
         capt_array = np.ma.array([10.0]*20)
         fo_array = np.ma.array([0.0]*20)
         # Dual input
@@ -1284,7 +1374,7 @@ class TestFlap(unittest.TestCase, NodeTest):
         self.assertTrue(self.node_class.can_operate(
             ('HDF Duration', 'Landing', 'Takeoff'), family=A('Family', 'Citation VLJ')))
 
-    @patch('analysis_engine.multistate_parameters.at')
+    @patch('analysis_engine.library.at')
     def test_derive(self, at):
         at.get_flap_map.return_value = {f: str(f) for f in (0, 1, 2, 5, 10, 15, 25, 30, 40)}
         _am = A('Model', 'B737-333')
@@ -1300,10 +1390,35 @@ class TestFlap(unittest.TestCase, NodeTest):
         self.assertEqual(node.values_mapping, at.get_flap_map.return_value)
         self.assertEqual(node.units, ut.DEGREE)
         self.assertIsInstance(node.array, MappedArray)
-        self.assertEqual(node.array.raw.tolist(), ([0]*6 + [1]*3 + [5]*5 + [10]*5 + [15]*10 + [25]*5 + [30]*14 + [40]*4))
+        self.assertEqual(node.array.raw.tolist(), [0] * 11 + [40] * 92 + [None])
 
+    @patch('analysis_engine.library.at')
+    def test_derive__md82(self, at):
+        at.get_flap_map.return_value = {f: str(f) for f in (0, 13, 20, 25, 30, 40)}
+        _am = A('Model', None)
+        _as = A('Series', None)
+        _af = A('Family', 'DC-9')
+        attributes = (_am, _as, _af)
+        array = np.ma.array(list(range(50)) + list(range(-5, 0)) + [13.1, 1.3, 10, 10])
+        flap = P(name='Flap Angle', array=array, frequency=1)
+        for index in (1, 57, 58):
+            flap.array[index] = np.ma.masked
+        node = self.node_class()
+        node.derive(flap, *attributes)
+        attributes = (a.value for a in attributes)
+        at.get_flap_map.assert_called_once_with(*attributes)
+        self.assertEqual(node.values_mapping, at.get_flap_map.return_value)
+        self.assertEqual(node.units, ut.DEGREE)
+        self.assertIsInstance(node.array, MappedArray)
+        # Note multipliers introduced as output frequency now raised to 4Hz.
+        self.assertEqual(node.array.size, 59*4)
+        self.assertEqual(node.array.raw.tolist(),[0.0]+7*[None]+189*[40]+6*[0]+19*[13]+3*[0]+11*[None])
+        self.assertEqual(node.array.mask.sum(), 18)
+        self.assertTrue(node.array.mask[1*4])
+        self.assertTrue(node.array.mask[57*4])
+        self.assertTrue(node.array.mask[58*4])
 
-    @patch('analysis_engine.multistate_parameters.at')
+    @patch('analysis_engine.library.at')
     #
     # Note: This test is somewhat academic as the Beechcraft does not record
     # Flap Angle, rather has discrete switches for Flap position.
@@ -1324,8 +1439,8 @@ class TestFlap(unittest.TestCase, NodeTest):
         self.assertEqual(node.units, ut.DEGREE)
         self.assertIsInstance(node.array, MappedArray)
         ma_test.assert_masked_array_equal(
-            node.array.raw,
-            np.ma.array([0]*5 + [17.5]*7 + [35])
+            node.array.raw[::4],
+            np.ma.array([0.0, 17.5, 17.5, 17.5, 17.5, 17.5, 17.5, 17.5, 17.5, 35.0, 35.0, 35.0, 35.0]),
         )
 
     @patch('analysis_engine.library.at')
@@ -1420,7 +1535,7 @@ class TestFlapExcludingTransition(unittest.TestCase, NodeTest):
             family=A('Family', None),
         ))
 
-    @patch('analysis_engine.multistate_parameters.at')
+    @patch('analysis_engine.library.at')
     def test_derive(self, at):
         at.get_flap_map.return_value = {f: str(f) for f in (0, 1, 2, 5, 10, 15, 25, 30, 40)}
         _am = A('Model', 'B737-333')
@@ -1430,14 +1545,14 @@ class TestFlapExcludingTransition(unittest.TestCase, NodeTest):
         array = np.ma.array([0] * 5 + list(range(42)) + [42] * 5)
         flap = P(name='Flap Angle', array=array, frequency=2)
         node = self.node_class()
-        node.derive(flap, None, *attributes)
+        node.derive(flap, *attributes)
         attributes = (a.value for a in attributes)
         at.get_flap_map.assert_called_once_with(*attributes)
         self.assertEqual(node.values_mapping, at.get_flap_map.return_value)
         self.assertEqual(node.units, ut.DEGREE)
         self.assertIsInstance(node.array, MappedArray)
-        self.assertEqual(node.frequency, 1)
-        self.assertEqual(node.array.raw.tolist(), [0] * 48 + [40] * 4)
+        self.assertEqual(node.frequency, 4)
+        self.assertEqual(node.array.raw.tolist(), [0] * 95 + [40] * 8 + [None])
 
     def test_derive__flap_1_2(self):
         _am = A('Model', 'B737-448(F)')
@@ -1446,7 +1561,7 @@ class TestFlapExcludingTransition(unittest.TestCase, NodeTest):
 
         flap_angle = load(os.path.join(test_data_path, 'ae-1165-flap_angle.nod'))
         node = self.node_class()
-        node.derive(flap_angle, None, _am, _as, _af)
+        node.derive(flap_angle, _am, _as, _af)
         self.assertEqual(node.units, ut.DEGREE)
         self.assertIsInstance(node.array, MappedArray)
         # Should be 4 slices @ flap 1, 4 slices @ flap 2 and 3 slices @ flap 5
@@ -1888,7 +2003,7 @@ class TestFlapLeverSynthetic(unittest.TestCase, NodeTest):
         series = A('Series', 'B737-300')
         family = A('Family', 'B737 Classic')
         node = self.node_class()
-        node.derive(flap, slat, flaperon, None, None, model, series, family)
+        node.derive(flap, slat, flaperon, model, series, family)
 
         # Check against an expected array of lever detents:
         expected = [0, 0, 5, 2, 1, 0, 0, 10, 15, 25, 30, 40, 0, 0, 0]
@@ -1922,9 +2037,8 @@ class TestFlapLeverSynthetic(unittest.TestCase, NodeTest):
         series = A('Series', None)
         family = A('Family', 'A330')
         node = self.node_class()
-        node.derive(flap, slat, flaperon, None, None, model, series, family)
+        node.derive(flap, slat, flaperon, model, series, family)
 
-        mapping = {x: str(x) for x in sorted(set(expected))}
         self.assertEqual(list(node.array), list(np.repeat(expected, repeat)))
 
     @patch('analysis_engine.multistate_parameters.at')
@@ -1972,7 +2086,7 @@ class TestFlapLeverSynthetic(unittest.TestCase, NodeTest):
 
         approach = buildsections('Approach And Landing', (7,10))
         node = self.node_class()
-        node.derive(flap, slat, None, None, None, model, series, family, approach, frame)
+        node.derive(flap, slat, None, model, series, family, approach, frame)
         self.assertEqual(list(node.array), list(np.repeat(expected, repeat)))
 
 
@@ -2409,7 +2523,7 @@ class TestSlatExcludingTransition(unittest.TestCase, NodeTest):
             family=A('Family', 'B737 Classic'),
         ))
 
-    @patch('analysis_engine.multistate_parameters.at')
+    @patch('analysis_engine.library.at')
     def test_derive(self, at):
         at.get_slat_map.return_value = {s: str(s) for s in (0, 16, 25)}
         _am = A('Model', None)
@@ -2425,7 +2539,7 @@ class TestSlatExcludingTransition(unittest.TestCase, NodeTest):
         self.assertEqual(node.values_mapping, at.get_slat_map.return_value)
         self.assertEqual(node.units, ut.DEGREE)
         self.assertIsInstance(node.array, MappedArray)
-        self.assertEqual(node.array.raw.tolist(), [0] * 33 + [25] * 4)
+        self.assertEqual(node.array.raw.tolist(), [0] * 65 + [25] * 8 + [None])
 
 
 class TestSlatIncludingTransition(unittest.TestCase, NodeTest):
@@ -2473,14 +2587,16 @@ class TestSlatFullyExtended(unittest.TestCase):
     def test_can_operate(self):
         node = self.node_class()
         operational_combinations = node.get_operational_combinations()
-        self.assertEqual(len(operational_combinations), 255) # 2**8-1
+        self.assertEqual(len(operational_combinations), 65535) # 2**16-1
 
     def setUp(self):
         extended_l_array = [ 0,  0,  0,  0,  0,  1,  1,  0,  0,  0]
         extended_r_array = [ 0,  0,  0,  0,  1,  1,  1,  0,  0,  0]
+        extended_7_array = [ 0,  0,  0,  0,  1,  1,  1,  0,  0,  0]
 
         self.extended_l = M(name='Slat (L1) Fully Extended', array=np.ma.array(extended_l_array), values_mapping={1:'Extended'})
         self.extended_r = M(name='Slat (R3) Fully Extended', array=np.ma.array(extended_r_array), values_mapping={1:'Extended'})
+        self.extended_7 = M(name='Slat (7) Fully Extended', array=np.ma.array(extended_7_array), values_mapping={1:'Extended'})
         self.node_class = SlatFullyExtended
 
     def test_derive(self):
@@ -2493,12 +2609,21 @@ class TestSlatFullyExtended(unittest.TestCase):
                     None,
                     None,
                     self.extended_r,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    self.extended_7,
                     None,)
         np.testing.assert_equal(node.array.data, result)
 
     def test_derive_masked_value(self):
         self.extended_l.array.mask = [ 0,  0,  0,  1,  0,  1,  0,  0,  1,  0]
         self.extended_r.array.mask = [ 0,  0,  0,  0,  0,  1,  0,  0,  1,  0]
+        self.extended_7.array.mask = [ 0,  0,  0,  0,  0,  1,  0,  0,  1,  0]
 
         result_array = [ 0,  0,  0,  0,  0,  0,  1,  0,  0,  0]
         result_mask =  [ 0,  0,  0,  0,  0,  1,  0,  0,  1,  0]
@@ -2511,6 +2636,14 @@ class TestSlatFullyExtended(unittest.TestCase):
                     None,
                     None,
                     self.extended_r,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    self.extended_7,
                     None,)
         np.testing.assert_equal(node.array.data, result_array)
         np.testing.assert_equal(node.array.mask, result_mask)
@@ -2521,14 +2654,16 @@ class TestSlatPartExtended(unittest.TestCase):
     def test_can_operate(self):
         node = self.node_class()
         operational_combinations = node.get_operational_combinations()
-        self.assertEqual(len(operational_combinations), 255) # 2**8-1
+        self.assertEqual(len(operational_combinations), 65535) # 2**16-1
 
     def setUp(self):
         extended_l_array = [ 0,  0,  0,  0,  0,  1,  1,  0,  0,  0]
         extended_r_array = [ 0,  0,  0,  0,  1,  1,  1,  0,  0,  0]
+        extended_7_array = [ 0,  0,  0,  0,  1,  1,  1,  0,  0,  0]
 
         self.extended_l = M(name='Slat (L1) Part Extended', array=np.ma.array(extended_l_array), values_mapping={1:'Part Extended'})
         self.extended_r = M(name='Slat (R3) Part Extended', array=np.ma.array(extended_r_array), values_mapping={1:'Part Extended'})
+        self.extended_7 = M(name='Slat (7) Part Extended', array=np.ma.array(extended_7_array), values_mapping={1:'Part Extended'})
         self.node_class = SlatPartExtended
 
     def test_derive(self):
@@ -2541,12 +2676,21 @@ class TestSlatPartExtended(unittest.TestCase):
                     None,
                     None,
                     self.extended_r,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    self.extended_7,
                     None,)
         np.testing.assert_equal(node.array.data, result)
 
     def test_derive_masked_value(self):
         self.extended_l.array.mask = [ 0,  0,  0,  1,  0,  1,  0,  0,  1,  0]
         self.extended_r.array.mask = [ 0,  0,  0,  0,  0,  1,  0,  0,  1,  0]
+        self.extended_7.array.mask = [ 0,  0,  0,  0,  0,  1,  0,  0,  1,  0]
 
         result_array = [ 0,  0,  0,  0,  0,  0,  1,  0,  0,  0]
         result_mask =  [ 0,  0,  0,  0,  0,  1,  0,  0,  1,  0]
@@ -2559,6 +2703,14 @@ class TestSlatPartExtended(unittest.TestCase):
                     None,
                     None,
                     self.extended_r,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    self.extended_7,
                     None,)
         np.testing.assert_equal(node.array.data, result_array)
         np.testing.assert_equal(node.array.mask, result_mask)
@@ -2569,14 +2721,16 @@ class TestSlatInTransit(unittest.TestCase):
     def test_can_operate(self):
         node = self.node_class()
         operational_combinations = node.get_operational_combinations()
-        self.assertEqual(len(operational_combinations), 255) # 2**8-1
+        self.assertEqual(len(operational_combinations), 65535) # 2**16-1
 
     def setUp(self):
         transit_l_array = [ 0,  0,  0,  0,  0,  1,  1,  0,  0,  0]
         transit_r_array = [ 0,  0,  0,  0,  1,  1,  1,  0,  0,  0]
+        transit_7_array = [ 0,  0,  0,  0,  1,  1,  1,  0,  0,  0]
 
         self.transit_l = M(name='Slat (L1) In Transit', array=np.ma.array(transit_l_array), values_mapping={1:'In Transit'})
         self.transit_r = M(name='Slat (R3) In Transit', array=np.ma.array(transit_r_array), values_mapping={1:'In Transit'})
+        self.transit_7 = M(name='Slat (7) In Transit', array=np.ma.array(transit_r_array), values_mapping={1:'In Transit'})
         self.node_class = SlatInTransit
 
     def test_derive(self):
@@ -2589,12 +2743,21 @@ class TestSlatInTransit(unittest.TestCase):
                     None,
                     None,
                     self.transit_r,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    self.transit_7,
                     None,)
         np.testing.assert_equal(node.array.data, result)
 
     def test_derive_masked_value(self):
         self.transit_l.array.mask = [ 0,  0,  0,  1,  0,  1,  0,  0,  1,  0]
         self.transit_r.array.mask = [ 0,  0,  0,  0,  0,  1,  0,  0,  1,  0]
+        self.transit_7.array.mask = [ 0,  0,  0,  0,  0,  1,  0,  0,  1,  0]
 
         result_array = [ 0,  0,  0,  0,  0,  0,  1,  0,  0,  0]
         result_mask =  [ 0,  0,  0,  0,  0,  1,  0,  0,  1,  0]
@@ -2607,6 +2770,14 @@ class TestSlatInTransit(unittest.TestCase):
                     None,
                     None,
                     self.transit_r,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    self.transit_7,
                     None,)
         np.testing.assert_equal(node.array.data, result_array)
         np.testing.assert_equal(node.array.mask, result_mask)
@@ -4054,7 +4225,6 @@ class TestGearDownInTransit(unittest.TestCase):
     def test_derive__down_sel_transition_time(self, at):
         at.get_gear_transition_times.return_value = (10, 10)
         # Gear Up Selected changed to Up + transition time
-        ac_series = A('Generic') # patch transition time to be 10 seconds
         down_sel = M('Gear Down Selected', array=np.ma.array([1]*5 + [0]*40 + [1]*15),
                      values_mapping={0: 'Up', 1: 'Down'})
         node = self.node_class()
@@ -4067,7 +4237,6 @@ class TestGearDownInTransit(unittest.TestCase):
     def test_derive__gear_down_transition_time(self, at):
         at.get_gear_transition_times.return_value = (10, 10)
         # Gear Down changed to Up + transition time
-        ac_series = A('Generic') # patch transition time to be 10 seconds
         gear_down = M('Gear Down', array=np.ma.array([1]*5 + [0]*50 + [1]*5),
                    values_mapping={0: 'Up', 1: 'Down'})
         node = self.node_class()
@@ -4080,7 +4249,6 @@ class TestGearDownInTransit(unittest.TestCase):
     def test_derive__gear_up_transition_time(self, at):
         at.get_gear_transition_times.return_value = (10, 10)
         # Gear Up changed to Up - transition time
-        ac_series = A('Generic') # patch transition time to be 10 seconds
         gear_up = M('Gear Up', array=np.ma.array([0]*15 + [1]*30 + [0]*15),
                    values_mapping={0: 'Down', 1: 'Up'})
         node = self.node_class()
@@ -4133,11 +4301,8 @@ class TestGearDownInTransit(unittest.TestCase):
     def test_derive__down_sel_red_warning(self, at):
         at.get_gear_transition_times.return_value = (10, 10)
         # Gear Up Selected changed to Up + red warning
-        ac_series = A('Generic') # patch transition time to be 10 seconds
         down_sel = M('Gear Down Selected', array=np.ma.array([1]*5 + [0]*40 + [1]*15),
                      values_mapping={0: 'Up', 1: 'Down'})
-        gear_red_warn = M('Gear (*) Red Warning', array=np.ma.array([0]*5 + [1]*10 + [0]*30 + [1]*10 + [0]*5),
-                      values_mapping={0: '-', 1: 'Warning'})
         node = self.node_class()
         node.derive(None, None, down_sel, None, None, None, self.airborne, self.model, self.series, self.family)
 
@@ -4148,7 +4313,6 @@ class TestGearDownInTransit(unittest.TestCase):
     def test_derive__gear_down_red_warning(self, at):
         at.get_gear_transition_times.return_value = (10, 10)
         # Gear Down changed to Up + transition time
-        ac_series = A('Generic') # patch transition time to be 10 seconds
         gear_down = M('Gear Down', array=np.ma.array([1]*5 + [0]*50 + [1]*5),
                    values_mapping={0: 'Up', 1: 'Down'})
         red_warn = M('Gear (*) Red Warning', array=np.ma.array([0]*5 + [1]*10 + [0]*30 + [1]*10 + [0]*5),
@@ -4163,7 +4327,6 @@ class TestGearDownInTransit(unittest.TestCase):
     def test_derive__gear_up_red_warning(self, at):
         at.get_gear_transition_times.return_value = (10, 10)
         # Gear Up changed to Up - transition time
-        ac_series = A('Generic') # patch transition time to be 10 seconds
         gear_up = M('Gear Up', array=np.ma.array([0]*15 + [1]*30 + [0]*15),
                    values_mapping={0: 'Down', 1: 'Up'})
         red_warn = M('Gear (*) Red Warning', array=np.ma.array([0]*5 + [1]*10 + [0]*30 + [1]*10 + [0]*5),
@@ -4178,7 +4341,6 @@ class TestGearDownInTransit(unittest.TestCase):
     def test_derive__gear_down_red_warning_B737_classic(self, at):
         at.get_gear_transition_times.return_value = (10, 10)
         # Gear Down changed to Up + transition time
-        ac_series = A('Generic') # patch transition time to be 10 seconds
         gear_down = M('Gear Down', array=np.ma.array([1]*5 + [0]*50 + [1]*5),
                    values_mapping={0: 'Up', 1: 'Down'})
         red_warn = M('Gear (*) Red Warning', array=np.ma.array([0]*5 + [1]*10 + [0]*25 + [1]*15 + [0]*5),

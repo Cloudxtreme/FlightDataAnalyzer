@@ -24,6 +24,10 @@ from analysis_engine.node import (
 logger = logging.getLogger(__name__)
 not_windows = sys.platform not in ('win32', 'win64') # False for Windows :-(
 
+CALCULATE_NODE_LAST = [
+    '2 Deg Pitch To 35 Ft Duration',
+]
+
 """
 TODO:
 =====
@@ -245,6 +249,17 @@ def dependencies3(di_graph, root, node_mgr, raise_cir_dep=False):
         # order the successors based on the order in the derive method; this allows the
         # class to define the best path through the dependency tree.
         ordered_successors = [name for (name, d) in sorted(di_graph[node].items(), key=lambda a: a[1].get('order', False))]
+
+        # Move troublesome nodes to the end of ordered_successors list. The first node traversed
+        # can have a big impact on the processing order. In Python 2 dictionaries are unordered
+        # and meaning ordered_successors is unordered too. In Python 3, it's now ordered.
+        # Instead of starting with 'Airspeed Top Of Descent To 4000 Ft Min' it
+        # is now starting with '2 Deg Pitch To 35 Ft Duration' causing a
+        # node process order issue for TouchDown kti.
+        if node == 'root':
+            while ordered_successors[0] in CALCULATE_NODE_LAST:
+                ordered_successors.append(ordered_successors.pop(0))
+
         for dependency in ordered_successors:
             # traverse again, 'like we did last summer'
             if traverse_tree(dependency):
@@ -268,8 +283,6 @@ def dependencies3(di_graph, root, node_mgr, raise_cir_dep=False):
     ordering = []
     path = deque()  # current branch path
     active_nodes = set()  # operational nodes visited for fast lookup
-    path_start_param = []#set()
-    path_start_kpv = []#set()
     tree_path = [] # For viewing the tree in which nodes are add to path
     traverse_tree(root)  # start recursion
     # log any circular dependencies caught
@@ -358,7 +371,7 @@ def graph_adjacencies(graph):
     :returns: Restructured graph
     '''
     data = []
-    for n,nbrdict in graph.adjacency_iter():
+    for n,nbrdict in graph.adjacency():
         # build the dict for this node
         d = dict(id=n, name=graph.node[n].get('label', n), data=graph.node[n])
         adj = []
@@ -466,7 +479,7 @@ def graph_nodes(node_mgr):
 
 
 def process_order(gr_all, node_mgr, raise_inoperable_requested=False,
-                  raise_cir_dep=False, path_tree_file=None):
+                  raise_cir_dep=False, dependency_tree_log=None):
     """
     :param gr_all:
     :type gr_all: nx.DiGraph
@@ -476,9 +489,9 @@ def process_order(gr_all, node_mgr, raise_inoperable_requested=False,
     :rtype:
     """
     process_order, tree_path = dependencies3(gr_all, 'root', node_mgr, raise_cir_dep=raise_cir_dep)
-    logger.debug("Processing order of %d nodes is: %s", len(process_order), process_order)
-    if path_tree_file:
-        ordered_tree_to_file(tree_path, name=path_tree_file)
+    logger.info("Processing order of %d nodes is: %s", len(process_order), process_order)
+    if dependency_tree_log:
+        ordered_tree_to_file(tree_path, name=dependency_tree_log)
     for n, node in enumerate(process_order):
         gr_all.node[node]['label'] = '%d: %s' % (n, node)
         gr_all.node[node]['active'] = True
@@ -534,7 +547,7 @@ def remove_floating_nodes(graph):
 
 def dependency_order(node_mgr, draw=not_windows,
                      raise_inoperable_requested=False, raise_cir_dep=False,
-                     path_tree_file=None):
+                     dependency_tree_log=None):
     """
     Main method for retrieving processing order of nodes.
 
@@ -548,7 +561,7 @@ def dependency_order(node_mgr, draw=not_windows,
     _graph = graph_nodes(node_mgr)
     gr_all, gr_st, order = process_order(_graph, node_mgr,
                                          raise_inoperable_requested=raise_inoperable_requested,
-                                         raise_cir_dep=raise_cir_dep, path_tree_file=path_tree_file)
+                                         raise_cir_dep=raise_cir_dep, dependency_tree_log=dependency_tree_log)
 
     if draw:
         from json import dumps

@@ -677,7 +677,7 @@ v0.31.1
    - KPV: Helicopter Pitch/Roll on ground/deck added <40% collective condition where missing
    - KPV: AT Engaged AP disengaged use custom 300fpm climb criteria
    - KTI: Touchdown: fix Saab 2000 attr comparison
-   - Multidtate: APVertMode: added Vertical Speed Engaged optional dependancy
+   - Multidtate: APVertMode: added Vertical Speed Engaged optional dependency
    - Multistate: SpeedbrakeSelected: B777 correct armed when between 0 and 1
    - Multistate APEngaged: keep or'd mask
    - Node: Multistate: Pass state attribute to aligned param during alignment

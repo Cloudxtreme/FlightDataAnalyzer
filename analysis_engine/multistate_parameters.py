@@ -21,10 +21,10 @@ from analysis_engine.library import (
     align,
     all_of,
     any_of,
+    calculate_flap,
     calculate_slat,
     clump_multistate,
     datetime_of_index,
-    excluding_transition,
     find_edges_on_state_change,
     including_transition,
     index_at_value,
@@ -47,9 +47,8 @@ from analysis_engine.library import (
     slices_remove_small_slices,
     smooth_signal,
     step_values,
-    surface_for_synthetic,
     vstack_params,
-    vstack_params_where_state
+    vstack_params_where_state,
 )
 
 from analysis_engine.settings import (
@@ -63,6 +62,68 @@ from analysis_engine.settings import (
 from flightdatautilities.numpy_utils import slices_int
 
 logger = logging.getLogger(name=__name__)
+
+class AOAAbnormalOperation(MultistateDerivedParameterNode):
+    '''
+    AOA operation state. A multistate parameter that stacks all the AOA failure, signal failure,
+    heater and correction parameters to identify abnormal operation of the AOA sensors.
+    '''
+    name = 'AOA Abnormal Operation'
+
+    values_mapping = {
+        0: '-',
+        1: 'AOA (L) Failure',
+        2: 'AOA (L) Signal Failure',
+        3: 'AOA (L) Primary Heater',
+        4: 'AOA (R) Failure',
+        5: 'AOA (R) Signal Failure',
+        6: 'AOA (R) Primary Heater',
+        7: 'AOA Signal Failure',
+        8: 'AOA Secondary Heater',
+        9: 'AOA Correction Program',
+    }
+
+    @classmethod
+    def can_operate(cls, available):
+        return any_of(cls.get_dependency_names(), available)
+
+
+    def derive(self,
+                 aoa_l_fail=P('AOA (L) Failure'),
+                 aoa_l_signal_fail=P('AOA (L) Signal Failure'),
+                 aoa_l_heater=P('AOA (L) Primary Heater'),
+                 aoa_r_fail=P('AOA (R) Failure'),
+                 aoa_r_signal_fail=P('AOA (R) Signal Failure'),
+                 aoa_r_heater=P('AOA (R) Primary Heater'),
+                 aoa_signal_fail=P('AOA Signal Failure'),
+                 aoa_sec_heater=P('AOA Secondary Heater'),
+                 aoa_correction=P('AOA Correction Program'),):
+
+        parameter = first_valid_parameter(aoa_l_fail, aoa_l_signal_fail, aoa_l_heater,
+                  aoa_r_fail, aoa_r_signal_fail, aoa_r_heater,
+                  aoa_signal_fail, aoa_sec_heater, aoa_correction)
+
+        if parameter:
+            self.array = np_ma_zeros_like(parameter.array)
+
+        if aoa_l_fail:
+            self.array[(aoa_l_fail.array == 'Failed').filled(False)] = aoa_l_fail.name
+        if aoa_l_signal_fail:
+            self.array[(aoa_l_signal_fail.array == 'Failed').filled(False)] = aoa_l_signal_fail.name
+        if aoa_l_heater:
+            self.array[(aoa_l_heater.array != 'On').filled(False)] = aoa_l_heater.name
+        if aoa_r_fail:
+            self.array[(aoa_r_fail.array == 'Failed').filled(False)] = aoa_r_fail.name
+        if aoa_r_signal_fail:
+            self.array[(aoa_r_signal_fail.array == 'Failed').filled(False)] = aoa_r_signal_fail.name
+        if aoa_r_heater:
+            self.array[(aoa_r_heater.array != 'On').filled(False)] = aoa_r_heater.name
+        if aoa_signal_fail:
+            self.array[(aoa_signal_fail.array == 'Failed').filled(False)] = aoa_signal_fail.name
+        if aoa_sec_heater:
+            self.array[(aoa_sec_heater.array != 'On').filled(False)] = aoa_sec_heater.name
+        if aoa_correction:
+            self.array[(aoa_correction.array == 'Yes').filled(False)] = aoa_correction.name
 
 
 class APEngaged(MultistateDerivedParameterNode):
@@ -1142,11 +1203,8 @@ class Flap(MultistateDerivedParameterNode):
             _slices = runs_of_ones(np.logical_and(flap.array>=0.9, flap.array<=2.1))
             for s in _slices:
                 flap.array[s] = smooth_signal(flap.array[s], window_len=5, window='flat')
-
-        self.values_mapping = at.get_flap_map(model.value, series.value, family.value)
-        self.frequency = flap.hz
-        self.offset = flap.offset
-        self.array = including_transition(flap.array, self.values_mapping, hz=self.hz, mode='flap')
+        self.values_mapping, self.array, self.frequency, self.offset = calculate_flap(
+            'lever', flap, model, series, family)
 
 
 class FlapLever(MultistateDerivedParameterNode):
@@ -1237,9 +1295,13 @@ class FlapIncludingTransition(MultistateDerivedParameterNode):
 
 class FlapExcludingTransition(MultistateDerivedParameterNode):
     '''
-    Value will only match the flap angle once
-    the transition has stopped (at least 3s by default).
+    Specifically designed to cater for maintenance monitoring, this assumes
+    that when moving the higher of the start and endpoints of the movement
+    apply. This increases the chance of needing a flap overspeed inspection,
+    but provides a more cautious interpretation of the maintenance
+    requirements.
     '''
+
     units = ut.DEGREE
 
     @classmethod
@@ -1247,7 +1309,7 @@ class FlapExcludingTransition(MultistateDerivedParameterNode):
                     model=A('Model'), series=A('Series'), family=A('Family')):
 
         if not all_of(('Flap Angle', 'Model', 'Series', 'Family'), available):
-            return all_of(('Flap', 'Model', 'Series', 'Family'), available)
+            return False
 
         try:
             at.get_flap_map(model.value, series.value, family.value)
@@ -1258,77 +1320,15 @@ class FlapExcludingTransition(MultistateDerivedParameterNode):
 
         return True
 
-    def derive(self, flap_angle=P('Flap Angle'), flap=M('Flap'),
+    def derive(self, flap_angle=P('Flap Angle'),
                model=A('Model'), series=A('Series'), family=A('Family')):
-        self.values_mapping = at.get_flap_map(model.value, series.value, family.value)
-        if flap_angle:
-            self.array = excluding_transition(flap_angle.array, self.values_mapping, hz=self.hz)
-        else:
-            # if we do not have flap angle use flap, use states as values
-            # will vary between frames
-            array = MappedArray(np_ma_masked_zeros_like(flap.array),
-                                values_mapping=self.values_mapping)
-            for value, state in six.iteritems(self.values_mapping):
-                array[flap.array == state] = state
-            self.array = array
-
-
-class FlapForLeverSynthetic(MultistateDerivedParameterNode):
-    '''
-    Flap parameter for Flap Lever Synthetic. Uses Flap Including Transition on
-    extension, and Flap Excluding Transition on retraction. ref. AE-2033
-    '''
-    name = 'Flap For Flap Lever Synthetic'
-    units = ut.DEGREE
-    align_frequency = 2  # force higher than most Flap frequencies
-
-
-    @classmethod
-    def can_operate(cls, available,
-                    model=A('Model'), series=A('Series'), family=A('Family')):
-
-        return all_of(('Flap Including Transition', 'Flap Excluding Transition', 'Model', 'Series', 'Family'), available)
-
-    def derive(self, flap_inc=M('Flap Including Transition'), flap_exc=M('Flap Excluding Transition'),
-               model=A('Model'), series=A('Series'), family=A('Family'),):
-
-
-        self.values_mapping = at.get_flap_map(model.value, series.value, family.value)
-
-        # Prepare the destination array:
-        self.array = MappedArray(np_ma_masked_zeros_like(flap_inc.array),
-                                 values_mapping=self.values_mapping)
-
-        self.array = surface_for_synthetic(flap_inc, flap_exc, self.values_mapping)
-
-
-class SlatForLeverSynthetic(MultistateDerivedParameterNode):
-    '''
-    Slat parameter for Flap Lever Synthetic. Uses Slat Including Transition on
-    extension, and Slat Excluding Transition on retraction. ref. AE-2033
-    '''
-    name = 'Slat For Flap Lever Synthetic'
-    units = ut.DEGREE
-    align_frequency = 2  # force higher than most Slat frequencies
-
-
-    @classmethod
-    def can_operate(cls, available):
-
-        return all_of(('Slat Including Transition', 'Slat Excluding Transition', 'Model', 'Series', 'Family'), available)
-
-
-    def derive(self, slat_inc=M('Slat Including Transition'), slat_exc=M('Slat Excluding Transition'),
-               model=A('Model'), series=A('Series'), family=A('Family'),):
-
-
-        self.values_mapping = at.get_slat_map(model.value, series.value, family.value)
-
-        # Prepare the destination array:
-        self.array = MappedArray(np_ma_masked_zeros_like(slat_inc.array),
-                                 values_mapping=self.values_mapping)
-
-        self.array = surface_for_synthetic(slat_inc, slat_exc, self.values_mapping)
+        family_name = family.value if family else None
+        if "B737" in family_name:
+            _slices = runs_of_ones(np.logical_and(flap_angle.array>=0.9, flap_angle.array<=2.1))
+            for s in _slices:
+                flap_angle.array[s] = smooth_signal(flap_angle.array[s], window_len=5, window='flat')
+        self.values_mapping, self.array, self.frequency, self.offset = calculate_flap(
+            'excluding', flap_angle, model, series, family)
 
 
 class FlapLeverSynthetic(MultistateDerivedParameterNode):
@@ -1344,8 +1344,7 @@ class FlapLeverSynthetic(MultistateDerivedParameterNode):
     def can_operate(cls, available,
                     model=A('Model'), series=A('Series'), family=A('Family')):
 
-        if not (all_of(('Flap', 'Model', 'Series', 'Family'), available) or \
-                all_of(('Flap For Lever Synthetic', 'Model', 'Series', 'Family'), available)):
+        if not all_of(('Flap', 'Model', 'Series', 'Family'), available):
             return False
 
         try:
@@ -1364,7 +1363,7 @@ class FlapLeverSynthetic(MultistateDerivedParameterNode):
         slat_required = any(slat is not None for slat, flap, flaperon in
                             angles.values())
         if slat_required:
-            can_operate = can_operate and any_of(('Slat', 'Slat For Lever Synthetic'), available)
+            can_operate = can_operate and 'Slat' in available
 
         flaperon_required = any(flaperon is not None for slat, flap, flaperon in
                                 angles.values())
@@ -1373,9 +1372,7 @@ class FlapLeverSynthetic(MultistateDerivedParameterNode):
 
         return can_operate
 
-
     def derive(self, flap=M('Flap'), slat=M('Slat'), flaperon=M('Flaperon'),
-               flap_synth=M('Flap For Flap Lever Synthetic'), slat_synth=M('Slat For Flap Lever Synthetic'),
                model=A('Model'), series=A('Series'), family=A('Family'),
                approach=S('Approach And Landing'), frame=A('Frame'),):
         try:
@@ -1395,13 +1392,11 @@ class FlapLeverSynthetic(MultistateDerivedParameterNode):
         self.array = MappedArray(np_ma_masked_zeros_like(flap.array),
                                  values_mapping=self.values_mapping)
 
-        flap_param = flap or flap_synth
-        slat_param = slat or slat_synth
-
+        # Update the destination array according to the mappings:
         for (state, (s, f, a)) in six.iteritems(angles):
-            condition = (flap_param.array == str(f))
+            condition = (flap.array == str(f))
             if s is not None:
-                condition &= (slat_param.array == str(s))
+                condition &= (slat.array == str(s))
             if a is not None:
                 condition &= (flaperon.array == str(a))
             if use_conf:
@@ -1540,7 +1535,6 @@ class GearDownInTransit(MultistateDerivedParameterNode):
     @classmethod
     def can_operate(cls, available, model=A('Model'), series=A('Series'), family=A('Family')):
         # Can operate with a any combination of parameters available
-        gear_transits = ('Gear (L) Down In Transit', 'Gear (N) Down In Transit', 'Gear (R) Down In Transit', 'Gear (C) Down In Transit')
         gears_available = all_of(('Gear Down', 'Gear Down Selected'), available) \
             or all_of(('Gear Up', 'Gear Down'), available) \
             or all_of(('Gear Down Selected', 'Gear In Transit'), available) \
@@ -2312,10 +2306,13 @@ class SlatExcludingTransition(MultistateDerivedParameterNode):
     def derive(self, slat=P('Slat Angle'),
                model=A('Model'), series=A('Series'), family=A('Family')):
 
-        self.values_mapping = at.get_slat_map(model.value, series.value, family.value)
-        self.frequency = slat.hz
-        self.offset = slat.offset
-        self.array = excluding_transition(slat.array, self.values_mapping, hz=self.hz)
+        self.values_mapping, self.array, self.frequency, self.offset = calculate_slat(
+            'excluding',
+            slat,
+            model,
+            series,
+            family,
+        )
 
 
 class SlatIncludingTransition(MultistateDerivedParameterNode):
@@ -2373,9 +2370,18 @@ class SlatFullyExtended(MultistateDerivedParameterNode):
                slat_r1=P('Slat (R1) Fully Extended'),
                slat_r2=P('Slat (R2) Fully Extended'),
                slat_r3=P('Slat (R3) Fully Extended'),
-               slat_r4=P('Slat (R4) Fully Extended')):
+               slat_r4=P('Slat (R4) Fully Extended'),
+               slat_1=P('Slat (1) Fully Extended'),
+               slat_2=P('Slat (2) Fully Extended'),
+               slat_3=P('Slat (3) Fully Extended'),
+               slat_4=P('Slat (4) Fully Extended'),
+               slat_5=P('Slat (5) Fully Extended'),
+               slat_6=P('Slat (6) Fully Extended'),
+               slat_7=P('Slat (7) Fully Extended'),
+               slat_8=P('Slat (8) Fully Extended'),):
 
-        extended_params = (slat_l1, slat_l2, slat_l3, slat_l4, slat_r1, slat_r2, slat_r3, slat_r4)
+        extended_params = (slat_l1, slat_l2, slat_l3, slat_l4, slat_r1, slat_r2, slat_r3, slat_r4,
+                           slat_1, slat_2, slat_3, slat_4, slat_5, slat_6, slat_7, slat_8)
         extended_stack = vstack_params_where_state(*[(d, 'Extended') for d in extended_params])
 
         array = np_ma_zeros_like(extended_stack[0], dtype=np.short)
@@ -2408,9 +2414,18 @@ class SlatPartExtended(MultistateDerivedParameterNode):
                slat_r1=P('Slat (R1) Part Extended'),
                slat_r2=P('Slat (R2) Part Extended'),
                slat_r3=P('Slat (R3) Part Extended'),
-               slat_r4=P('Slat (R4) Part Extended')):
+               slat_r4=P('Slat (R4) Part Extended'),
+               slat_1=P('Slat (1) Part Extended'),
+               slat_2=P('Slat (2) Part Extended'),
+               slat_3=P('Slat (3) Part Extended'),
+               slat_4=P('Slat (4) Part Extended'),
+               slat_5=P('Slat (5) Part Extended'),
+               slat_6=P('Slat (6) Part Extended'),
+               slat_7=P('Slat (7) Part Extended'),
+               slat_8=P('Slat (8) Part Extended')):
 
-        extended_params = (slat_l1, slat_l2, slat_l3, slat_l4, slat_r1, slat_r2, slat_r3, slat_r4)
+        extended_params = (slat_l1, slat_l2, slat_l3, slat_l4, slat_r1, slat_r2, slat_r3, slat_r4,
+                           slat_1, slat_2, slat_3, slat_4, slat_5, slat_6, slat_7, slat_8)
         extended_stack = vstack_params_where_state(*[(d, 'Part Extended') for d in extended_params])
 
         array = np_ma_zeros_like(extended_stack[0], dtype=np.short)
@@ -2443,9 +2458,17 @@ class SlatInTransit(MultistateDerivedParameterNode):
                slat_r1=P('Slat (R1) In Transit'),
                slat_r2=P('Slat (R2) In Transit'),
                slat_r3=P('Slat (R3) In Transit'),
-               slat_r4=P('Slat (R4) In Transit')):
-
-        transit_params = (slat_l1, slat_l2, slat_l3, slat_l4, slat_r1, slat_r2, slat_r3, slat_r4)
+               slat_r4=P('Slat (R4) In Transit'),
+               slat_1=P('Slat (1) In Transit'),
+               slat_2=P('Slat (2) In Transit'),
+               slat_3=P('Slat (3) In Transit'),
+               slat_4=P('Slat (4) In Transit'),
+               slat_5=P('Slat (5) In Transit'),
+               slat_6=P('Slat (6) In Transit'),
+               slat_7=P('Slat (7) In Transit'),
+               slat_8=P('Slat (8) In Transit')):
+        transit_params = (slat_l1, slat_l2, slat_l3, slat_l4, slat_r1, slat_r2, slat_r3, slat_r4,
+                          slat_1, slat_2, slat_3, slat_4, slat_5, slat_6, slat_7, slat_8)        
         transit_stack = vstack_params_where_state(*[(d, 'In Transit') for d in transit_params])
 
         array = np_ma_zeros_like(transit_stack[0], dtype=np.short)
@@ -3153,22 +3176,7 @@ class StableApproachStages(object):
             phase = phases.get_last(within_slice=approach.slice, within_use='any')
             # use Combined descent phase slice as it contains the data from
             # top of descent to touchdown (approach starts and finishes later)
-
-            # The following comment assumes that only one aircraft type has this issue, though
-            # it appears to occur on multiple.
-            ## Only one aircraft prone to generating erroneous phases due to
-            ## weather monitoring behaviour has this model number.
-            ## This ensures that a lack of a descent phase within an approach
-            ## does not cause a fatal error for that aircraft.
-            #if model and model.value == 'BAE 146-301':
-            try:
-                approach.slice = phase.slice
-            except AttributeError:
-                logger.warning('Unable to derive stable approach, '
-                               'no descent phase found within approach.')
-                pass
-            #else:
-                #approach.slice = phase.slice
+            approach.slice = phase.slice
 
             # FIXME: approaches shorter than 10 samples will not work due to
             # the use of moving_average with a width of 10 samples.

@@ -9,7 +9,7 @@ from flightdatautilities import units as ut
 from flightdatautilities.geometry import great_circle_distance__haversine
 
 from analysis_engine.node import (
-    A, M, P, S, KTI, aeroplane, aeroplane_only, App,
+    A, M, P, S, KTI, App,
     helicopter, KeyTimeInstanceNode
 )
 
@@ -22,7 +22,6 @@ from analysis_engine.library import (
     find_toc_tod,
     first_valid_sample,
     hysteresis,
-    index_at_distance,
     index_at_value,
     is_index_within_slice,
     last_valid_sample,
@@ -1427,6 +1426,11 @@ class Touchdown(KeyTimeInstanceNode):
 
     @classmethod
     def can_operate(cls, available, ac_type=A('Aircraft Type'), seg_type=A('Segment Type')):
+        # if we have 'Acceleration Longitudinal' hold off until
+        # 'Acceleration Longitudinal Offset Removed' can be processed
+        if 'Acceleration Longitudinal' in available and \
+           'Acceleration Longitudinal Offset Removed' not in available:
+            return False
         if ac_type and ac_type.value == 'helicopter':
             return 'Airborne' in available
         elif seg_type and seg_type.value in ('GROUND_ONLY', 'NO_MOVEMENT', 'MID_FLIGHT', 'START_ONLY'):
@@ -1445,7 +1449,9 @@ class Touchdown(KeyTimeInstanceNode):
                family=A('Family'),
                # helicopter
                airs=S('Airborne'),
-               ac_type=A('Aircraft Type')):
+               ac_type=A('Aircraft Type'),
+               # Only used in can_operate
+               accel=P('Acceleration Longitudinal')):
         if ac_type and ac_type.value == 'helicopter':
             for air in airs:
                 self.create_kti(air.stop_edge)
@@ -1590,7 +1596,6 @@ class Touchdown(KeyTimeInstanceNode):
             # ...to find the best estimate...
             # If we have lots of measures, bias towards the earlier ones.
             #index_tdn = np.median(index_list[:4])
-
             if len(index_list) == 0:
                 # No clue where the aircraft landed. Give up.
                 return
@@ -1605,6 +1610,11 @@ class Touchdown(KeyTimeInstanceNode):
                     index_tdn = min(index_tdn, index_gog)
 
             # self.create_kti(index_tdn)
+            self.info("Touchdown: Selected index: %s @ %sHz. Complete list (index_alt: %s, "\
+                      "index_gog: %s, index_wheel_touch: %s,  index_brake: %s, "\
+                      "index_decel: %s, index_dax: %s, index_z: %s)",
+                      index_tdn, self.frequency, index_alt, index_gog, index_wheel_touch,
+                      index_brake, index_decel, index_dax, index_z)
             self.create_kti(index_tdn)
 
             '''
@@ -1755,6 +1765,8 @@ class AltitudeWhenDescending(KeyTimeInstanceNode):
     def derive(self, descending=S('Descent'),
                alt_aal=P('Altitude AAL'),
                alt_std=P('Altitude STD Smoothed')):
+        alt_aal=repair_mask(alt_aal.array, frequency=alt_aal.frequency, copy=True)
+        alt_std=repair_mask(alt_std.array, frequency=alt_std.frequency, copy=True)
         for descend in descending:
             for alt_threshold in self.NAME_VALUES['altitude']:
                 # Will trigger a single KTI per height (if threshold is
@@ -1763,10 +1775,10 @@ class AltitudeWhenDescending(KeyTimeInstanceNode):
                 # each height.
                 if alt_threshold <= TRANSITION_ALTITUDE:
                     # Use height above airfield.
-                    alt = alt_aal.array
+                    alt = alt_aal
                 else:
                     # Use standard altitudes.
-                    alt = alt_std.array
+                    alt = alt_std
 
                 index = index_at_value(alt, alt_threshold,
                                        slice(descend.slice.stop,

@@ -8,6 +8,7 @@ from analysis_engine.library import (
     all_of,
     filter_slices_duration,
     index_at_value,
+    mask_outside_slices,
     moving_average,
     runs_of_ones,
     shift_slice,
@@ -191,7 +192,6 @@ class HoverTaxi(FlightPhaseNode):
                trans_hfs=S('Transition Hover To Flight'),
                trans_fhs=S('Transition Flight To Hover')):
 
-        low_flights = []
         air_taxis = []
         taxis = []
 
@@ -215,6 +215,76 @@ class HoverTaxi(FlightPhaseNode):
                 air_taxis.extend([taxi])
 
         self.create_phases(air_taxis)
+
+
+class NoseDownAttitudeAdoption(FlightPhaseNode):
+    '''
+    ABO H-175 helideck takeoff profile requires helicopters to reach
+    -10 degrees pitch after reaching 20ft radio altitude and initiation of nose
+    down attitude. This phase represents the duration of time between nose down
+    attitude initiation and -10 degrees pitch. The phase does not exclude pitch
+    values prior to 20ft radio altitude as insufficient altitude prior to nose
+    down attitude adoption needs to be picked up by a KPV to generate events.
+    Likewise, if a pitch of -10 degrees is never found, the minimum is used.
+    '''
+    align_frequency = 16
+    can_operate = helicopter_only
+
+    @classmethod
+    def can_operate(cls, available, family=A('Family')):
+        return family and family.value == 'H175' and all_of(('Pitch', 'Initial Climb'), available)
+
+    def derive(self, pitch=P('Pitch'), climbs=S('Initial Climb')):
+
+        for climb in climbs:
+            masked_pitch = mask_outside_slices(pitch.array, [climb.slice])
+
+            pitch_index = np.ma.argmax(masked_pitch <= -10) or np.ma.argmin(masked_pitch)
+
+            scaling_factor = abs(masked_pitch[pitch_index]) / 10
+
+            window_threshold = -10.00 * scaling_factor
+            min_window_threshold = -8.00 * scaling_factor
+            window_size = 32
+            window_threshold_step = 0.050 * scaling_factor
+
+            diffs = np.ma.ediff1d(masked_pitch[climb.slice.start:pitch_index])
+            diffs_exist = diffs.data.size >= 2
+
+            big_diff_index = -1
+
+            while diffs_exist:
+                sig_pitch_threshold = window_threshold / window_size
+
+                for i, d in enumerate(diffs):
+                    # Look for the first big negative pitch spike
+                    if diffs[i:i+window_size].sum() < window_threshold:
+
+                        # Find the first significant negative value within the
+                        # spike and make that the starting point of the phase
+                        big_diff_index = np.ma.argmax(diffs[i:i+window_size] < sig_pitch_threshold) + i
+                        break
+
+                # Bail on match or total failure
+                if big_diff_index != -1 or window_size < 2:
+                    break
+
+                # Shrink window size instead of looking for insignificant
+                # spikes and scale window/pitch thresholds accordingly
+                if window_threshold >= min_window_threshold:
+                    window_size /= 2; min_window_threshold /= 2; window_threshold /= 2; window_threshold_step /= 2
+                    sig_pitch_threshold *= 2
+                else:
+                    window_threshold += window_threshold_step
+
+            if big_diff_index != -1:
+                self.create_section(slice(climb.slice.start + big_diff_index,
+                                          pitch_index))
+
+            # Worst case fallback, this should happen extremely rarely
+            # and would trigger all events related to this phase
+            else:
+                self.create_section(slice(climb.slice.start, climb.slice.stop))
 
 
 class RotorsTurning(FlightPhaseNode):

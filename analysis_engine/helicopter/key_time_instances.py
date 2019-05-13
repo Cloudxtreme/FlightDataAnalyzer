@@ -1,6 +1,3 @@
-import numpy as np
-import six
-
 from analysis_engine.node import (
     S, KeyTimeInstanceNode, helicopter_only
 )

@@ -86,6 +86,8 @@ from analysis_engine.helicopter.key_point_values import (
     Pitch100To20FtMax,
     Pitch100To20FtMin,
     Pitch50FtToTouchdownMin,
+    PitchMinimumDuringNoseDownAttitudeAdoption,
+    PitchNoseDownAttitudeAdoptionDuration,
     PitchOnGroundMax,
     PitchOnDeckMax,
     PitchOnDeckMin,
@@ -491,7 +493,6 @@ class TestAirspeed500To100FtMax(unittest.TestCase):
         self.node_class = Airspeed500To100FtMax
 
     def test_can_operate(self):
-        opts = self.node_class.get_operational_combinations(ac_type=helicopter)
         self.assertTrue(self.node_class.can_operate, [('Airspeed', 'Altitude AGL', 'Final Approach')])
 
     def test_derive_basic(self):
@@ -514,7 +515,6 @@ class TestAirspeed500To100FtMin(unittest.TestCase):
         self.node_class = Airspeed500To100FtMin
 
     def test_can_operate(self):
-        opts = self.node_class.get_operational_combinations(ac_type=helicopter)
         self.assertTrue(self.node_class.can_operate, [('Airspeed', 'Altitude AGL', 'Final Approach')])
 
     def test_derive_basic(self):
@@ -537,7 +537,6 @@ class TestAirspeed100To20FtMax(unittest.TestCase):
         self.node_class = Airspeed100To20FtMax
 
     def test_can_operate(self):
-        opts = self.node_class.get_operational_combinations(ac_type=helicopter)
         self.assertTrue(self.node_class.can_operate, [('Airspeed', 'Altitude AGL', 'Approach And Landing')])
 
     def test_derive_basic(self):
@@ -560,7 +559,6 @@ class TestAirspeed100To20FtMin(unittest.TestCase):
         self.node_class = Airspeed100To20FtMin
 
     def test_can_operate(self):
-        opts = self.node_class.get_operational_combinations(ac_type=helicopter)
         self.assertTrue(self.node_class.can_operate, [('Airspeed', 'Altitude AGL', 'Approach And Landing')])
 
     def test_derive_basic(self):
@@ -1212,26 +1210,19 @@ class TestAltitudeRadioMinBeforeNoseDownAttitudeAdoptionOffshore(unittest.TestCa
                      'Nose Down Attitude Adoption', 'Altitude Radio',
                      'Altitude AAL For Flight Phases')]
 
-        opts_h175 = self.node_class.get_operational_combinations(
-                    ac_type=helicopter, family=A('Family', 'H175'))
+        opts_h175 = self.node_class.get_operational_combinations(family=A('Family', 'H175'))
 
-        opts_aeroplane = self.node_class.get_operational_combinations(ac_type=aeroplane)
 
         self.assertEqual(opts_h175, expected)
-        self.assertNotEqual(opts_aeroplane, expected)
 
     def test_derive(self):
         node = AltitudeRadioMinBeforeNoseDownAttitudeAdoptionOffshore()
-        offshore_data = np.concatenate([np.zeros(10), np.ones(80),
-                                        np.zeros(10)])
+        offshore_data = np.concatenate([np.zeros(10), np.ones(80), np.zeros(10)])
 
-        offshore_array = MappedArray(offshore_data,
-                                     values_mapping=self.offshore_mapping)
+        offshore_array = MappedArray(offshore_data, values_mapping=self.offshore_mapping)
         offshore_multistate = M(name='Offshore', array=offshore_array)
 
-        liftoff = KTI('Liftoff', items=[
-            KeyTimeInstance(15, 'Liftoff'),
-        ])
+        liftoff = KTI('Liftoff', items=[KeyTimeInstance(15, 'Liftoff')])
 
         hover = buildsection('Hover', 20, 30)
         nose_down = buildsection('Nose Down Attitude Adoption', 29, 32)
@@ -1254,22 +1245,18 @@ class TestAltitudeRadioMinBeforeNoseDownAttitudeAdoptionOffshore(unittest.TestCa
 
     def test_derive_multiple_liftoffs_and_offshore_clumps(self):
         node = AltitudeRadioMinBeforeNoseDownAttitudeAdoptionOffshore()
-        offshore_data = np.concatenate([np.zeros(10), np.ones(35),
-                                         np.zeros(3), np.ones(35),
-                                         np.zeros(17)])
+        offshore_data = np.concatenate([np.zeros(10), np.ones(35), np.zeros(3), np.ones(35), np.zeros(17)])
 
-        offshore_array = MappedArray(offshore_data,
-                                     values_mapping=self.offshore_mapping)
+        offshore_array = MappedArray(offshore_data, values_mapping=self.offshore_mapping)
         offshore_multistate = M(name='Offshore', array=offshore_array)
 
         liftoffs = KTI('Liftoff', items=[
             KeyTimeInstance(15, 'Liftoff'),
-            KeyTimeInstance(50, 'Liftoff'),
+            KeyTimeInstance(50, 'Liftoff')
         ])
 
         hovers = buildsections('Hover', [20, 30], [52, 65])
-        nose_downs = buildsections('Nose Down Attitude Adoption', [29, 32],
-                                                                  [59, 67])
+        nose_downs = buildsections('Nose Down Attitude Adoption', [29, 32], [59, 67])
 
         rad_alt = np.concatenate([np.zeros(13), np.linspace(0, 30, num=7),
                                   np.linspace(30, 5, num=10),
@@ -1294,25 +1281,19 @@ class TestAltitudeRadioMinBeforeNoseDownAttitudeAdoptionOffshore(unittest.TestCa
 
     def test_derive_fallback(self):
         node = AltitudeRadioMinBeforeNoseDownAttitudeAdoptionOffshore()
-        offshore_data = np.concatenate([np.zeros(10), np.ones(80),
-                                        np.zeros(10)])
+        offshore_data = np.concatenate([np.zeros(10), np.ones(80), np.zeros(10)])
 
-        offshore_array = MappedArray(offshore_data,
-                                     values_mapping=self.offshore_mapping)
+        offshore_array = MappedArray(offshore_data, values_mapping=self.offshore_mapping)
         offshore_multistate = M(name='Offshore', array=offshore_array)
 
-        liftoff = KTI('Liftoff', items=[
-            KeyTimeInstance(15, 'Liftoff'),
-        ])
+        liftoff = KTI('Liftoff', items=[KeyTimeInstance(15, 'Liftoff')])
 
         hover = buildsection('Hover', 20, 30)
         nose_down = buildsection('Nose Down Attitude Adoption', 29, 32)
 
-        rad_alt = np.concatenate([np.zeros(13), np.linspace(30, 5, num=17),
-                                  np.linspace(5, 1000, num=70)])
+        rad_alt = np.concatenate([np.zeros(13), np.linspace(30, 5, num=17), np.linspace(5, 1000, num=70)])
 
-        alt_aal = np.concatenate([np.zeros(13), np.linspace(0, 25, num=17),
-                                  np.zeros(70)])
+        alt_aal = np.concatenate([np.zeros(13), np.linspace(0, 25, num=17), np.zeros(70)])
 
         node.derive(offshore_multistate, liftoff, hover, nose_down,
                     P('Altitude Radio', rad_alt),
@@ -1323,21 +1304,16 @@ class TestAltitudeRadioMinBeforeNoseDownAttitudeAdoptionOffshore(unittest.TestCa
         self.assertEqual(round(node[0].value, 2), 26.88)
 
 
-class TestAltitudeRadioAtNoseDownAttitudeInitation(unittest.TestCase,
-                                                   NodeTest):
+class TestAltitudeRadioAtNoseDownAttitudeInitation(unittest.TestCase, NodeTest):
 
     def setUp(self):
         self.node_class = AltitudeRadioAtNoseDownAttitudeInitiation
 
     def test_can_operate(self):
         expected = [('Altitude Radio', 'Nose Down Attitude Adoption')]
-        opts_h175 = self.node_class.get_operational_combinations(
-                    ac_type=helicopter, family=A('Family', 'H175'))
-        opts_aeroplane = self.node_class.get_operational_combinations(
-                         ac_type=aeroplane)
+        opts_h175 = self.node_class.get_operational_combinations(family=A('Family', 'H175'))
 
         self.assertEqual(opts_h175, expected)
-        self.assertNotEqual(opts_aeroplane, expected)
 
     def test_derive(self):
         node = AltitudeRadioAtNoseDownAttitudeInitiation()
@@ -1354,8 +1330,7 @@ class TestAltitudeRadioAtNoseDownAttitudeInitation(unittest.TestCase,
         descent_alt = np.linspace(50, 0, num=10)
         ascent_alt = np.linspace(0, 50, num=15)
         rad_alt = np.concatenate([ascent_alt, descent_alt, ascent_alt])
-        nose_downs = buildsections('Nose Down Attitude Adoption',
-                                   [5, 20], [23, 39])
+        nose_downs = buildsections('Nose Down Attitude Adoption', [5, 20], [23, 39])
         node.derive(P('Altitude Radio', rad_alt), nose_downs)
 
         self.assertEqual(len(node), 2)
@@ -3415,6 +3390,75 @@ class TestPitch50FtToTouchdownMin(unittest.TestCase):
         self.assertEqual(node[0].index, 79)
         self.assertAlmostEqual(node[0].value, -7.917, places=3)
 
+
+class TestPitchMinimumDuringNoseDownAttitudeAdoption(unittest.TestCase, NodeTest):
+
+    def setUp(self):
+        self.node_class = PitchMinimumDuringNoseDownAttitudeAdoption
+
+    def test_can_operate(self):
+        expected = [('Pitch', 'Nose Down Attitude Adoption')]
+        opts_h175 = self.node_class.get_operational_combinations(family=A('Family', 'H175'))
+
+        self.assertEqual(opts_h175, expected)
+
+    def test_derive(self):
+        node = PitchMinimumDuringNoseDownAttitudeAdoption()
+        pitch = np.linspace(2, -11, num=25)
+        nose_downs = buildsection('Nose Down Attitude Adoption', 10, 15)
+        node.derive(P('Pitch', pitch), nose_downs)
+
+        self.assertEqual(len(node), 1)
+        self.assertEqual(node[0].index, 16)
+        self.assertEqual(round(node[0].value, 2), -6.67)
+
+    def test_derive_multiple(self):
+        node = PitchMinimumDuringNoseDownAttitudeAdoption()
+        descent_pitch = np.linspace(2, -11, num=10)
+        ascent_pitch = np.linspace(-11, 2, num=15)
+        pitch = np.concatenate([np.ones(6) * 2, descent_pitch, np.ones(5) * 2, ascent_pitch, descent_pitch])
+        nose_downs = buildsections('Nose Down Attitude Adoption',
+                                   [5, 20], [30, 44])
+        node.derive(P('Pitch', pitch), nose_downs)
+
+        self.assertEqual(len(node), 2)
+        self.assertEqual(node[0].index, 21)
+        self.assertEqual(node[0].value, -11.00)
+        self.assertEqual(node[1].index, 45)
+        self.assertEqual(node[1].value, -11.00)
+
+
+class TestPitchNoseDownAttitudeAdoptionDuration(unittest.TestCase, NodeTest):
+
+    def setUp(self):
+        self.node_class = PitchNoseDownAttitudeAdoptionDuration
+
+    def test_can_operate(self):
+        expected = [('Nose Down Attitude Adoption',)]
+        opts_h175 = self.node_class.get_operational_combinations( family=A('Family', 'H175'))
+
+        self.assertEqual(opts_h175, expected)
+
+    def test_derive(self):
+        node = PitchNoseDownAttitudeAdoptionDuration()
+        nose_downs = buildsection('Nose Down Attitude Adoption', 10, 15)
+        node.derive(nose_downs)
+
+        self.assertEqual(len(node), 1)
+        self.assertEqual(node[0].index, 15)
+        self.assertEqual(node[0].value, 5.0)
+
+    def test_derive_multiple(self):
+        node = PitchNoseDownAttitudeAdoptionDuration()
+        nose_downs = buildsections('Nose Down Attitude Adoption',
+                                   [10, 15], [30, 38])
+        node.derive(nose_downs)
+
+        self.assertEqual(len(node), 2)
+        self.assertEqual(node[0].index, 15)
+        self.assertEqual(node[0].value, 5.0)
+        self.assertEqual(node[1].index, 38)
+        self.assertEqual(node[1].value, 8.0)
 
 class TestPitchOnGroundMax(unittest.TestCase):
 

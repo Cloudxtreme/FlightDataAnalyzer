@@ -9,11 +9,11 @@ def main():
     segments = split_hdf_file_into_segments(file_path, param_group='FFD',
                                             split=False)
     # process one?
-    
+
     process_flight(segments[0])
-    graph_flight(segments[0])
-    
-    
+    #graph_flight(segments[0])
+
+
 if __name__ == '__main__':
     main()
-    
+

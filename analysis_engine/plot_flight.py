@@ -16,9 +16,9 @@ from flightdatautilities import units as ut
 from flightdatautilities.print_table import indent
 
 from analysis_engine.library import (
-    bearing_and_distance, 
-    latitudes_and_longitudes, 
-    repair_mask, 
+    bearing_and_distance,
+    latitudes_and_longitudes,
+    repair_mask,
     value_at_index,
 )
 from analysis_engine.node import derived_param_from_hdf, Parameter
@@ -49,8 +49,8 @@ logger = logging.getLogger(name=__name__)
 SKIP_KPVS = []
 KEEP_KPVS = ['ILS Frequency During Approach']
 SKIP_KTIS = ['Transmit']
-KEEP_KTIS = ['Takeoff Start','Liftoff', 'Touchdown', 
-             'Localizer Established Start', 'Localizer Established End', 
+KEEP_KTIS = ['Takeoff Start','Liftoff', 'Touchdown',
+             'Localizer Established Start', 'Localizer Established End',
              'Glideslope Established Start', 'Glideslope Established End',
              'IAN Final Approach Established Start', 'IAN Final Approach Established End',
              'IAN Glidepath Established Start', 'IAN Glidepath Established End',
@@ -60,7 +60,7 @@ class TypedWriter(object):
     """
     A CSV writer which will write rows to CSV file "f",
     which uses "fieldformats" to format fields.
-    
+
     ref: http://stackoverflow.com/questions/2982642/specifying-formatting-for-csv-writer-in-python
     """
 
@@ -72,24 +72,24 @@ class TypedWriter(object):
         self.formats = fieldformats
 
     def _format(self, row):
-        return dict((k, self.formats.get(k, '%s') % v if v or v == 0.0 else v) 
+        return dict((k, self.formats.get(k, '%s') % v if v or v == 0.0 else v)
                     for k, v in six.iteritems(row))
-    
+
     def writerow(self, row):
         self.writer.writerow(self._format(row))
 
     def writerows(self, rows):
         for row in rows:
             self.writerow(row)
-            
+
     def rowlist(self, rows):
         "Return a list of formatted rows as ordered by fieldnames"
         res = []
         for row in rows:
             res.append(self.writer._dict_to_list(self._format(row)))
         return res
-            
-            
+
+
 def add_track(kml, track_name, lat, lon, colour, alt_param=None, alt_mode=None,
               visible=True):
     '''
@@ -99,7 +99,7 @@ def add_track(kml, track_name, lat, lon, colour, alt_param=None, alt_mode=None,
     if alt_param:
         track_config['altitudemode'] = alt_mode
         track_config['extrude'] = 1
-    
+
     tracks = []
     track_coords = []
     count = 0
@@ -115,7 +115,7 @@ def add_track(kml, track_name, lat, lon, colour, alt_param=None, alt_mode=None,
             coords = (_lon, _lat, _alt)
         else:
             coords = (_lon, _lat)
-            
+
         if not all(coords) or any(np.isnan(coords)):
             continue
         track_coords.append(coords)
@@ -127,7 +127,7 @@ def add_track(kml, track_name, lat, lon, colour, alt_param=None, alt_mode=None,
             count = 0
     if track_coords:
         tracks.append(track_coords)
-    
+
     for index, track_coords in enumerate(tracks, start=1):
         track_config = track_config.copy()
         track_config['name'] = '%s (%d)' % (track_name, index)
@@ -165,7 +165,7 @@ def track_to_kml(hdf_path, kti_list, kpv_list, approach_list,
                  plot_altitude=None, dest_path=None):
     '''
     Plot results of process_flight onto a KML track.
-    
+
     :param flight_attrs: List of Flight Attributes
     :type flight_attrs: list
     :param plot_altitude: Name of Altitude parameter to use in KML
@@ -217,18 +217,18 @@ def track_to_kml(hdf_path, kti_list, kpv_list, approach_list,
             alt.array = ut.convert(alt.array, ut.FT, ut.METER)
         else:
             alt = None
-        
+
         if plot_altitude in altitude_absolute_params:
             altitude_mode = simplekml.constants.AltitudeMode.absolute
         elif plot_altitude in altitude_relative_params:
             altitude_mode = simplekml.constants.AltitudeMode.relativetoground
         else:
             altitude_mode = simplekml.constants.AltitudeMode.clamptoground
-        
+
         ## Get best latitude and longitude parameters.
         best_lat = None
         best_lon = None
-        
+
         for coord_config in coord_params:
             lat_name = coord_config['lat']
             lon_name = coord_config['lon']
@@ -246,16 +246,16 @@ def track_to_kml(hdf_path, kti_list, kpv_list, approach_list,
             if best:
                 best_lat = derived_param_from_hdf(lat).get_aligned(one_hz)
                 best_lon = derived_param_from_hdf(lon).get_aligned(one_hz)
-    
+
     # Add KTIs.
     for kti in kti_list:
         kti_point_values = {'name': kti.name}
-        
+
         if not KEEP_KTIS and kti.name in SKIP_KTIS:
             continue
         elif len(KEEP_KTIS)>0 and (kti.name not in KEEP_KTIS):
             continue
-        
+
         altitude = alt.at(kti.index) if alt else None
         kti_point_values['altitudemode'] = altitude_mode
         if altitude:
@@ -263,7 +263,7 @@ def track_to_kml(hdf_path, kti_list, kpv_list, approach_list,
         else:
             kti_point_values['coords'] = ((kti.longitude, kti.latitude),)
         kml.newpoint(**kti_point_values)
-    
+
     # Add KPVs.
     for kpv in kpv_list:
 
@@ -280,7 +280,7 @@ def track_to_kml(hdf_path, kti_list, kpv_list, approach_list,
             continue
         elif len(KEEP_KPVS)>0 and (kpv.name not in KEEP_KPVS):
             continue
-        
+
         style = simplekml.Style()
         style.iconstyle.color = simplekml.Color.red
         kpv_point_values = {'name': '%s (%.3f)' % (kpv.name, kpv.value)}
@@ -290,10 +290,10 @@ def track_to_kml(hdf_path, kti_list, kpv_list, approach_list,
             kpv_point_values['coords'] = ((kpv_lon, kpv_lat, altitude),)
         else:
             kpv_point_values['coords'] = ((kpv_lon, kpv_lat),)
-        
+
         pnt = kml.newpoint(**kpv_point_values)
         pnt.style = style
-    
+
     # Add approach centre lines.
     for app in approach_list:
         try:
@@ -307,11 +307,11 @@ def track_to_kml(hdf_path, kti_list, kpv_list, approach_list,
     return dest_path
 
 
-fig = plt.figure() 
+fig = plt.figure()
 def plot_parameter(array, new_subplot=False, show=True, label='', marker=None):
     """
     For quickly plotting a single parameter to see its shape.
-    
+
     :param array: Numpy array
     :type array: np.array
     :param marker: Optional marker format character.
@@ -342,23 +342,23 @@ def plot_parameter(array, new_subplot=False, show=True, label='', marker=None):
     ax.plot(array, marker=marker, label=label)
     if show:
         plt.show()
-    
+
 
 def plot_essential(hdf_path):
     """
     Plot the essential parameters for flight analysis.
-    
+
     Assumes hdf_path file contains the parameter series:
     Frame Counter, Airspeed, Altitude STD, Head True
-    
+
     show() is to be called elsewhere (from matplotlib.pyplot import show)
-    
+
     :param hdf_path: Path to HDF file.
     :type hdf_path: string
     """
     fig = plt.figure() ##figsize=(10,8))
     plt.title(os.path.basename(hdf_path))
-    
+
     with hdf_file(hdf_path) as hdf:
         ax1 = fig.add_subplot(4,1,1)
         #ax1.set_title('Frame Counter')
@@ -368,7 +368,7 @@ def plot_essential(hdf_path):
         ax3 = fig.add_subplot(4,1,3,sharex=ax2)
         ax3.plot(hdf['Altitude STD'].array, 'g-')
         ax4 = fig.add_subplot(4,1,4,sharex=ax2)
-        ax4.plot(hdf['Heading'].array, 'b-')    
+        ax4.plot(hdf['Heading'].array, 'b-')
 
 
 def plot_flight(hdf_path, kti_list, kpv_list, phase_list, aircraft_info):
@@ -376,7 +376,7 @@ def plot_flight(hdf_path, kti_list, kpv_list, phase_list, aircraft_info):
     """
     fig = plt.figure() ##figsize=(10,8))
     plt.title(os.path.basename(hdf_path))
-    
+
     with hdf_file(hdf_path) as hdf:
         #---------- Axis 1 ----------
         ax1 = fig.add_subplot(4,1,1)
@@ -385,7 +385,7 @@ def plot_flight(hdf_path, kti_list, kpv_list, phase_list, aircraft_info):
                       hdf['Altitude STD']).array
         frame = hdf['Time'].array
         #frame = hdf.get('Frame Counter',hdf['Altitude STD']).array
-        
+
         sections = []
         sections.append(alt_data)
         sections.append('k-')
@@ -403,7 +403,7 @@ def plot_flight(hdf_path, kti_list, kpv_list, phase_list, aircraft_info):
             elif phase.name == 'Grounded':
                 sections.append('k-')
         ax1.plot(*sections)
-        
+
         #---------- Axis 2 ----------
         ax2 = fig.add_subplot(4,1,2)
         #ax2 = fig.add_subplot(4,1,2,sharex=ax1)
@@ -424,7 +424,7 @@ def plot_flight(hdf_path, kti_list, kpv_list, phase_list, aircraft_info):
             elif phase.name == 'Descending':
                 sections.append('c-')
         ax2.plot(*sections)
-        
+
         #---------- Axis 3 ----------
         ax3 = fig.add_subplot(4,1,3)
         #ax3 = fig.add_subplot(4,1,3,sharex=ax1)
@@ -439,18 +439,18 @@ def plot_flight(hdf_path, kti_list, kpv_list, phase_list, aircraft_info):
             sections.append(airspeed[phase.slice])
             if phase.name == 'Fast':
                 sections.append('r-')
-        
+
         ax3.plot(*sections)
-        
+
         #---------- Axis 4 ----------
         if 'Heading Continuous' in hdf:
             ax4 = fig.add_subplot(4,1,4,sharex=ax1)
-            ax4.plot(hdf['Heading Continuous'].array, 'b-')  
-    
+            ax4.plot(hdf['Heading Continuous'].array, 'b-')
+
     for kpv in kpv_list:
         label = '%s %s' % (kpv.name, kpv.value)
         ax1.annotate(label, xy=(kpv.index, alt[kpv.index]),
-                     xytext=(-5, 100), 
+                     xytext=(-5, 100),
                      textcoords='offset points',
                      #arrowprops=dict(arrowstyle="->"),
                      rotation='vertical'
@@ -459,7 +459,7 @@ def plot_flight(hdf_path, kti_list, kpv_list, phase_list, aircraft_info):
     for kti in kti_list:
         label = '%s' % (kti.name)
         ax1.annotate(label, xy=(kti.index, alt[kti.index]),
-                     xytext=(-5, 100), 
+                     xytext=(-5, 100),
                      textcoords='offset points',
                      #arrowprops=dict(arrowstyle="->"),
                      rotation='vertical'
@@ -480,15 +480,15 @@ def csv_flight_details(hdf_path, kti_list, kpv_list, phase_list,
                        dest_path=None, append_to_file=True):
     """
     Currently writes to csv and prints to a table.
-    
+
     Phase types have a 'duration' column
-    
+
     :param dest_path: Outputs CSV to dest_path (removing if exists). If None,
       collates results by appending to a single file: 'combined_test_output.csv'
     """
     rows = []
     params = ['Airspeed', 'Altitude AAL']
-    attrs = ['value', 'datetime', 'latitude', 'longitude'] 
+    attrs = ['value', 'datetime', 'latitude', 'longitude']
     header = ['path', 'type', 'index', 'duration', 'name'] + attrs + params
     if not dest_path:
         header.append('Path')
@@ -525,7 +525,7 @@ def csv_flight_details(hdf_path, kti_list, kpv_list, phase_list,
         end['name'] = value.name + ' [END]'
         end['index'] = value.stop_edge
         rows.append(end)
-    
+
     # Append values of useful parameters at this time
     with hdf_file(hdf_path) as hdf:
         for param in params:
@@ -533,7 +533,7 @@ def csv_flight_details(hdf_path, kti_list, kpv_list, phase_list,
             if param not in hdf:
                 continue
             p = hdf[param]
-            dp = Parameter(name=p.name, array=p.array, 
+            dp = Parameter(name=p.name, array=p.array,
                            frequency=p.frequency, offset=p.offset)
             for row in rows:
                 row[param] = dp.at(row['index'])
@@ -574,8 +574,8 @@ if __name__ == '__main__':
                         help='Aircraft Tail Number for processing.')
     parser.add_argument('-frame', dest='frame', type=str, default=None,
                         help='Data frame name.')
-    args = parser.parse_args()    
-       
+    args = parser.parse_args()
+
     plot_flight(args.file, [], [], [], {
         'Tail Number': args.tail_number,
         'Precise Positioning': True,

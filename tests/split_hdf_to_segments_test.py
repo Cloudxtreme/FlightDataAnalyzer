@@ -517,18 +517,6 @@ class TestSplitSegments(unittest.TestCase):
 
         segment_tuples = split_segments(hdf, {})
 
-        expected = [('START_AND_STOP', slice(0, 3989.0, None), 0),
-                          ('START_AND_STOP', slice(3989.0, 7049.0, None), 1),
-                          ('START_AND_STOP', slice(7049.0, 9569.0, None), 1),
-                          ('START_AND_STOP', slice(9569.0, 12889.0, None), 1),
-                          ('START_AND_STOP', slice(12889.0, 15867.0, None), 1),
-                          ('START_AND_STOP', slice(15867.0, 18526.0, None), 3),
-                          ('START_AND_STOP', slice(18526.0, 21726.0, None), 2),
-                          ('START_AND_STOP', slice(21726.0, 24209.0, None), 2),
-                          ('START_AND_STOP', slice(24209.0, 26607.0, None), 1),
-                          ('START_AND_STOP', slice(26607.0, 28534.0, None), 3),
-                          ('START_AND_STOP', slice(28534.0, 30875.0, None), 2),
-                          ('START_AND_STOP', slice(30875.0, 33680.0, None), 3)]
         #for a, e in zip(segment_tuples, expected):
             #print(a,e,a==e)
 

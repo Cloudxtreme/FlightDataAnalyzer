@@ -39,7 +39,6 @@ class TestAllEnginesOperative(unittest.TestCase):
         oei = M(name='One Engine Inoperative', array=np.ma.array(oei_data), values_mapping=OneEngineInoperative.values_mapping)
         any_running = M(name='Eng (*) Any Running', array=np.ma.array(run_data),
                        values_mapping=Eng_AnyRunning.values_mapping)
-        autorotation = []
 
         node = self.node_class()
         node.derive(any_running, oei, S(items=[]))

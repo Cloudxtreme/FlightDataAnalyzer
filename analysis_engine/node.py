@@ -54,6 +54,7 @@ ApproachItem = recordtype(
     'ApproachItem',
     'type slice airport landing_runway approach_runway gs_est loc_est ils_freq turnoff lowest_lat lowest_lon lowest_hdg runway_change offset_ils',
     default=None)
+# XXX: The unused slice argument to KeyPointValue is deprecated to be removed at a later date.
 KeyPointValue = recordtype('KeyPointValue',
                            OrderedDict([('index', None), ('value', None), ('name', None), ('slice', slice(None)), ('datetime', None), ('latitude', None), ('longitude', None)]))
 KeyTimeInstance = recordtype('KeyTimeInstance',

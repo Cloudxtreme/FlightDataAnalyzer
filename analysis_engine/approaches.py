@@ -89,17 +89,17 @@ class ApproachInformation(ApproachNode):
 
     If we are unable to determine the airport and runway for a landing
     approach, it is also possible to fall back to the achieved flight record.
-    
+
     We then determine the periods of use of the ILS localizer and glideslope,
-    based on the installed equipment at the runway, the tuned frequency and 
+    based on the installed equipment at the runway, the tuned frequency and
     the ILS signals themselves.
-    
+
     Analysis allows for offset ILS localizers and runway changes. In both cases
-    only the first established period of operation on the localizer is used to 
+    only the first established period of operation on the localizer is used to
     determine established flight on the localizer (and possibly glideslope) as
     flight after turning off the offset localizer or stepping across to another
     runway will be flown visually.
-    
+
     Backcourse operation is considered not established, and hence will not
     trigger safety events.
 
@@ -110,7 +110,7 @@ class ApproachInformation(ApproachNode):
                     seg_type=A('Segment Type')):
         if seg_type and seg_type.value == 'GROUND_ONLY':
             return False
-        required = ['Approach And Landing']
+        required = ['Approach And Landing', 'Takeoff', 'Touchdown']
         required.append('Altitude AGL' if ac_type == helicopter else 'Altitude AAL')
         lat = 'Latitude Prepared' in available
         lon = 'Longitude Prepared' in available
@@ -281,7 +281,7 @@ class ApproachInformation(ApproachNode):
                lon_land=KPV('Longitude At Touchdown'),
                precision=A('Precise Positioning'),
                fast=S('Fast'),
-               
+
                #lat_smoothed=P('Latitude Smoothed'),
                #lon_smoothed=P('Longitude Smoothed'),
                u=P('Airspeed'),
@@ -291,7 +291,7 @@ class ApproachInformation(ApproachNode):
                roll=P('Roll'),
                heading=P('Heading'),
                distance_land=P('Distance To Landing'),
-               tdwns=KTI('Touchdown'), 
+               tdwns=KTI('Touchdown'),
                offshore=M('Offshore'),
                takeoff=S('Takeoff')
                ):
@@ -339,7 +339,7 @@ class ApproachInformation(ApproachNode):
                                                       lat.array[search_end], lon.array[search_end])[0]
                 else:
                     lowest_hdg = (tdn_hdg % 360.0).item()
-                
+
                 # While we're here, let's compute the turnoff index for this landing.
                 head_landing = hdg.array[slices_int((ref_idx+_slice.stop)/2, _slice.stop)]
                 if len(head_landing) > 2:
@@ -377,7 +377,7 @@ class ApproachInformation(ApproachNode):
                     lat_ga, lon_ga = latitudes_and_longitudes(bearing, distance, reference)
                     lowest_lat = lat_ga[0]
                     lowest_lon = lon_ga[0]
-                    
+
             if lat_land and lon_land and not (lowest_lat and lowest_lon):
                 # use lat/lon at landing if values at ref_idx are masked
                 # only interested in landing within approach slice.
@@ -423,17 +423,14 @@ class ApproachInformation(ApproachNode):
 
             # Simple determination of heliport.
             heliport = is_heliport(ac_type, airport, landing_runway)
-            
-            sorted_tdwns = sorted(tdwns, key=lambda touchdown: touchdown.index)
-            sorted_takeoffs = sorted(takeoff.get_slices(), key=lambda tkoff: tkoff.start)
-                        
-            for touchdown, tkoff in zip(sorted_tdwns,sorted_takeoffs):
+
+            for touchdown, tkoff in zip(tdwns.get_ordered_by_index(), takeoff.get_ordered_by_index()):
                 # If both the takeoff and touchdown point are offshore then we consider
                 # the approach to be a 'SHUTTLING APPROACH'. Else we continue to look for
                 # an 'AIRBORNE RADAR DIRECT/OVERHEAD APPROACH' or a 'STANDARD APPROACH'
                 #
                 # A couple of seconds are added to the end of the slice as some flights used
-                # to test this had the touchdown a couple of seconds outside the approach slice 
+                # to test this had the touchdown a couple of seconds outside the approach slice
                 if is_index_within_slice(touchdown.index, slice(_slice.start, _slice.stop+5*alt.frequency)):
                     if offshore and \
                        offshore.array[int(touchdown.index)] == 'Offshore' and \
@@ -447,7 +444,7 @@ class ApproachInformation(ApproachNode):
                             approach_type = 'SHUTTLING'
                         elif height_from_rig:
                             Vy = 80.0 # Type dependent?
-                
+
                             # conditions_defs is a dict of condition name : expression to evaluate pairs, listed this way for clarity
                             condition_defs={'Below 120 kts' : lambda p : p['Airspeed'] < 120,
                                                 'Below Vy+5' : lambda p : p['Airspeed'] < Vy+5.0,
@@ -458,9 +455,9 @@ class ApproachInformation(ApproachNode):
                                                 #'Below Vy-10' : lambda p : p['Airspeed'] < Vy-10.0,
                                                 #'Over Vy-10' : lambda p : p['Airspeed'] > Vy-10.0,
                                                 #'Above 30 gspd' : lambda p : p['Groundspeed'] > 30,
-                        
+
                                                 'Over 900 ft' : lambda p : p['Altitude ADH'] > 900,
-                                                'Over 200 ft' : lambda p : p['Altitude ADH'] > 200, 
+                                                'Over 200 ft' : lambda p : p['Altitude ADH'] > 200,
                                                 'Below 1750 ft': lambda p : p['Altitude ADH'] < 1750,
                                                 'Below 1100 ft' : lambda p : p['Altitude ADH'] < 1100,
                                                 'Over 350 ft' : lambda p : p['Altitude ADH'] > 350,
@@ -470,15 +467,15 @@ class ApproachInformation(ApproachNode):
                                                 'Not climbing' : lambda p : p['Vertical Speed'] < 200,
                                                 #'Over 400 ft' : lambda p : p['Altitude ADH'] > 400,
                                                 #'Below 1500 ft': lambda p : p['Altitude ADH'] < 1500,
-                                                #'Below 1300 ft': lambda p : p['Altitude ADH'] < 1300,                                                
-                
+                                                #'Below 1300 ft': lambda p : p['Altitude ADH'] < 1300,
+
                                                 'Roll below 25 deg' : lambda p : valid_between(p['Roll'], -25.0, 25.0),
                                                 'Wings Level' : lambda p : valid_between(p['Roll'], -10.0, 10.0),
                                                 'Within 20 deg of final heading' : lambda p : np.ma.abs(p['head_off_final']) < 20.0,
                                                 #'Within 45 deg of downwind leg' : 'valid_between(np.ma.abs(head_off_final), 135.0, 225.0)',
                                                 #'15 deg off final heading' : lambda p : np.ma.abs(np.ma.abs(p['head_off_two_miles'])-15.0) < 5.0,
                                                 #'Heading towards oil rig' : lambda p : np.ma.abs(p['head_off_two_miles']) < 6.0,
-                                                
+
                                                 'Beyond 0.7 NM' : lambda p : p['Distance To Landing'] > 0.7,
                                                 'Within 0.8 NM' : lambda p : p['Distance To Landing'] < 0.8,
                                                 'Beyond 1.5 NM' : lambda p : p['Distance To Landing'] > 1.5,
@@ -488,7 +485,7 @@ class ApproachInformation(ApproachNode):
                                                 'Within 10.0 NM' : lambda p : p['Distance To Landing'] < 10.0,
                                                 #'Within 1.5 NM' : lambda p : p['Distance To Landing'] < 1.5,
                                                 }
-                        
+
                             # Phase map is a dict of the flight phases with the list of conditions which must be
                             # satisfied for the phase to be active.
                             phase_map={'Circuit':['Below 120 kts',
@@ -520,15 +517,15 @@ class ApproachInformation(ApproachNode):
                                                          'Below 60 gspd',
                                                          'Below 700 ft',
                                                          ],
-                                       
+
                                        # Phases for ARDA/AROA
                                        #
-                                       # All heading conditions are commented out as the pilots usually 
-                                       # go outside the boundaries; the other conditions seem to be 
+                                       # All heading conditions are commented out as the pilots usually
+                                       # go outside the boundaries; the other conditions seem to be
                                        # enough to detect them
                                        'ARDA/AROA 10 to 3':['Within 10.0 NM',
                                                        'Beyond 3.0 NM',
-                                                       'Below 1750 ft', 
+                                                       'Below 1750 ft',
                                                        'Not climbing',
                                                        #'Heading towards oil rig',
                                                        ],
@@ -544,15 +541,15 @@ class ApproachInformation(ApproachNode):
                                                           #'15 deg off final heading'
                                                           ],
                                        }
-                            
+
                             """
                             #Phases that can be used to tighten the conditions for ARDA/AROA
-                        
+
                             'Radar Heading Change':['15 deg off final heading', 'Within 1.5 NM', 'Beyond 0.7 NM'],
                             'Low Approach':['Below Vy+5', 'Below 700 ft', 'Over 350 ft', 'Within 20 deg of final heading', 'Wings Level'],
                             'Low Circuit':['Below 120 kts', 'Over Vy-5', 'Below 700 ft', 'Over 350 ft', 'Roll below 25 deg']
-                            """                            
-                            
+                            """
+
                             approach_map = {'RIG': ['Circuit',
                                                     'Level within 2NM',
                                                     'Initial Descent',
@@ -562,17 +559,17 @@ class ApproachInformation(ApproachNode):
                                                                'ARDA/AROA Final']}
 
                             # Making sure the approach slice contains enough information to be able
-                            # to properly identify ARDA/AROA approaches (the procedure starts from 10NM 
+                            # to properly identify ARDA/AROA approaches (the procedure starts from 10NM
                             # before touchdown)
-                            
+
                             app_slice = slice(index_at_value(distance_land.array, 11, _slice=slice(0,touchdown.index)), touchdown.index)
-                            
-                            heading_repaired = repair_mask(heading.array[app_slice], 
+
+                            heading_repaired = repair_mask(heading.array[app_slice],
                                                            frequency=heading.frequency,
                                                            repair_duration=np.ma.count_masked(heading.array[app_slice]),
                                                            copy=True,
                                                            extrapolate=True)
-                            
+
                             param_arrays = {
                                     'Airspeed': u.array[app_slice],
                                     'Groundspeed': gspd.array[app_slice],
@@ -584,7 +581,7 @@ class ApproachInformation(ApproachNode):
                                     'Latitude': lat.array[app_slice],
                                     'Longitude': lon.array[app_slice],
                             }
-                    
+
                             longest_approach_type, longest_approach_durn, longest_approach_slice = find_rig_approach(condition_defs,
                                                                                                                      phase_map, approach_map,
                                                                                                                      Vy, None, param_arrays,
@@ -593,7 +590,7 @@ class ApproachInformation(ApproachNode):
                             if longest_approach_type is not None:
                                 approach_type = longest_approach_type.upper()
                                 _slice = slice(app_slice.start + longest_approach_slice.start, app_slice.stop)
-        
+
             if heliport:
                 self.create_approach(
                     approach_type,
@@ -615,15 +612,15 @@ class ApproachInformation(ApproachNode):
 
             #########################################################################
             ## Analysis of fixed wing approach to a runway
-            ## 
+            ##
             ## First step is to check the ILS frequency for the runway in use
             ## and cater for a change from the approach runway to the landing runway.
             #########################################################################
-            
+
             appr_ils_freq = None
             runway_change = False
             offset_ils = False
-            
+
             # Do we have a recorded ILS frequency? If so, what was it tuned to at the start of the approach??
             if ils_freq:
                 appr_ils_freq = ils_freq.array[int(_slice.start)]
@@ -676,7 +673,7 @@ class ApproachInformation(ApproachNode):
             #######################################################################
             ## Identification of the period established on the localizer
             #######################################################################
-                    
+
             loc_est = None
             if loc_slice:
                 valid_range = np.ma.flatnotmasked_edges(ils_loc.array[slices_int(_slice)])
@@ -689,10 +686,10 @@ class ApproachInformation(ApproachNode):
                 # The value of 45 deg was selected to encompass Washington National airport with a 40 deg offset.
                 hdg_diff = np.ma.abs(np.ma.mod((hdg.array-lowest_hdg)+180.0, 360.0)-180.0)
                 ils_hdg_45 = index_at_value(hdg_diff, 45.0, _slice=scan_back)
-                
+
                 # We are not interested above 1,500 ft, so may trim back the start point to that point:
                 ils_alt_1500 = index_at_value(alt_aal.array, 1500.0, _slice=scan_back)
-                
+
                 # The criteria for start of established phase is the latter of the approach phase start, the turn-in or 1500ft.
                 # The "or 0" allow for flights that do not turn through 45 deg or keep below 1500ft.
                 loc_start = max(loc_start, ils_hdg_45 or 0, ils_alt_1500 or 0)
@@ -710,7 +707,7 @@ class ApproachInformation(ApproachNode):
                     loc_estab = None
 
                 if loc_estab:
-                    
+
                     # Refine the end of the localizer established phase...
                     if (approach_runway and approach_runway['localizer']['is_offset']):
                         offset_ils = True
@@ -720,13 +717,13 @@ class ApproachInformation(ApproachNode):
                     elif approach_type in ['TOUCH_AND_GO', 'GO_AROUND']:
                         # We finish at the lowest point
                         loc_end = ref_idx
-                        
+
                     elif runway_change:
                         # Use the end of localizer phase as this already reflects the tuned frequency.
                         est_end = ils_established(ils_loc.array, slice(loc_estab, ref_idx), ils_loc.hz, point='end')
                         # Make sure we dont end up with a negative slice i.e. end before we are established.
                         loc_end = min([x for x in (loc_slice.stop, loc_end, est_end or np.inf) if x > loc_estab])
-    
+
                     elif approach_type == 'LANDING':
                         # Just end at 2 dots where we turn off the runway
                         loc_end_2_dots = index_at_value(np.ma.abs(ils_loc.array), 2.0, _slice=slice(turnoff+5*(_slice.stop-_slice.start)/100, loc_estab, -1))
@@ -746,7 +743,7 @@ class ApproachInformation(ApproachNode):
                 # We only look for glideslope established periods if the localizer is already established.
 
                 # The range to scan for the glideslope starts with localizer capture and ends at
-                # 200ft or the minimum height point for a go-around or the end of 
+                # 200ft or the minimum height point for a go-around or the end of
                 # localizer established, if either is earlier.
                 ils_gs_start = loc_estab
                 ils_gs_200 = index_at_value(alt.array, 200.0, _slice=slice(loc_end, ils_gs_start, -1))
