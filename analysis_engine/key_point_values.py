@@ -7266,6 +7266,7 @@ class HeadingDuringTakeoff(KeyPointValueNode):
                 # -1.42108547152020037174224853515625E-14 == 360.0
                 # which is an invalid value for Heading
                 if not np.ma.is_masked(value):
+                    # Test change
                     self.create_kpv(index, np.round(float(value), 8) % 360.0)
 
 
