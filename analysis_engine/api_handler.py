@@ -157,7 +157,7 @@ class HTTPHandler(MethodInterface, api.HTTPHandler):
         }
         return self.request(url)
 
-    def get_airport(self, code):
+    def get_airport(self, code, flight_dt=None):
         '''
         Returns details of an airport matching the provided code.
 
@@ -171,9 +171,10 @@ class HTTPHandler(MethodInterface, api.HTTPHandler):
             'base_url': settings.API_HTTP_BASE_URL.rstrip('/'),
             'code': str(code).strip().lower(),
         }
-        return self.request(url)
+        params = {'flight_dt': flight_dt.strftime(settings.DATETIME_FORMAT)} if flight_dt else {}
+        return self.request(url, params=params)
 
-    def get_nearest_airport(self, latitude, longitude):
+    def get_nearest_airport(self, latitude, longitude, flight_dt=None):
         '''
         Returns the nearest airports to the provided latitude and longitude.
 
@@ -200,6 +201,8 @@ class HTTPHandler(MethodInterface, api.HTTPHandler):
         #       Also more opportunity for caching similar responses.
         #       See https://gis.stackexchange.com/a/8674 for details.
         params = {'ll': '%.3f,%.3f' % (latitude, longitude), 'all': 1}
+        if flight_dt:
+            params.update(flight_dt=flight_dt.strftime(settings.DATETIME_FORMAT))
         return self.request(url, params=params)
 
 

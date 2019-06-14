@@ -616,3 +616,5 @@ NAME_VALUES_AILERON = {'aileron': at.get_aileron_detents()}
 NAME_VALUES_CONF = {'conf': at.get_conf_detents()}
 
 NAME_VALUES_LEVER = {'flap': at.get_lever_detents()}  # XXX: Key must be 'flap'
+
+DATETIME_FORMAT = '%Y-%m-%d %H:%M:%S'

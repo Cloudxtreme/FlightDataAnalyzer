@@ -31,6 +31,7 @@ from flightdatautilities import units as ut
 from flightdatautilities.array_operations import load_compressed
 import flightdatautilities.masked_array_testutils as ma_test
 
+from analysis_engine.settings import DATETIME_FORMAT
 from analysis_engine.library import (
     air_density,
     all_of,
@@ -8700,6 +8701,40 @@ class TestNearestRunway(unittest.TestCase):
         #  TODO: test case to fit description
         runway = nearest_runway(self._airports['004'], 301.640625, hint='landing')
         self.assertEqual(runway, self._expected['017'])
+
+    def test_find_runway_when_deprecated(self):
+        '''
+        Test finding duplicate deprecated runway when flight dt is older than deprecated dt.
+        '''
+        dt = datetime.utcnow()
+        airport = self._airports['003'].copy()
+        deprecated_runway = self._expected['004'].copy()
+        deprecated_runway.update(deprecated_dt=dt.strftime(DATETIME_FORMAT), id=1)
+        deprecated_runway_arg = deprecated_runway.copy()
+        deprecated_runway_arg.update(identifier='13R')
+        airport['runways'].append(deprecated_runway_arg)
+        runway = nearest_runway(airport, 130.5, hint='landing', flight_dt=dt-timedelta(days=1))
+        self.assertEqual(runway, deprecated_runway)
+
+    def test_find_runway_when_deprecated_with_ils(self):
+        dt = datetime.utcnow()
+        airport = self._airports['001'].copy()
+        airport['runways'] = [r.copy() for r in airport['runways']]
+        deprecated_runway = self._expected['002'].copy()
+        deprecated_runway.update(deprecated_dt=dt.strftime(DATETIME_FORMAT), id=1)
+        airport['runways'].append(deprecated_runway)
+        runway = nearest_runway(airport, 270.5, ilsfreq=109.5, flight_dt=dt-timedelta(days=1))
+        self.assertEqual(runway, deprecated_runway)
+
+    def test_find_runway_when_deprecated_with_lat_lon(self):
+        dt = datetime.utcnow()
+        airport = self._airports['001'].copy()
+        airport['runways'] = [r.copy() for r in airport['runways']]
+        deprecated_runway = self._expected['002'].copy()
+        deprecated_runway.update(deprecated_dt=dt.strftime(DATETIME_FORMAT), id=1)
+        airport['runways'].append(deprecated_runway)
+        runway = nearest_runway(airport, 270.5, latitude=51.464927, longitude=-0.440458, flight_dt=dt-timedelta(days=1))
+        self.assertEqual(runway, deprecated_runway)
 
 
 class TestWrapArray(unittest.TestCase):

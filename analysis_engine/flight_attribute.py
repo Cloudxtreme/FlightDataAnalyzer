@@ -181,10 +181,11 @@ class DestinationAirport(FlightAttributeNode):
 
     @classmethod
     def can_operate(cls, available):
-        return any_of(cls.get_dependency_names(), available)
+        return 'AFR Destination Airport' in available or all_of(('Destination', 'FDR Landing Datetime'), available)
 
     def derive(self, dest=P('Destination'),
-               afr_dest=A('AFR Destination Airport')):
+               afr_dest=A('AFR Destination Airport'),
+               flight_dt=A('FDR Landing Datetime')):
         '''
         Requires an ASCII destination parameter recording either the airport's
         ICAO or IATA code.
@@ -200,7 +201,7 @@ class DestinationAirport(FlightAttributeNode):
         value = value.decode()
         handler = api.get_handler(settings.API_HANDLER)
         try:
-            airport = handler.get_airport(value)
+            airport = handler.get_airport(value, flight_dt=flight_dt.value)
         except api.NotFoundError:
             self.warning('No destination airport found for %s.', value)
             return
@@ -295,11 +296,12 @@ class LandingAirport(FlightAttributeNode):
         1. Find the nearest airport to the coordinates at landing.
         2. Use the airport data provided in the achieved flight record.
         '''
-        return any_of(('Approach Information', 'AFR Landing Airport'), available)
+        return any_of(('Approach Information', 'AFR Landing Airport'), available) and 'FDR Landing Datetime' in available
 
     def derive(self,
                approaches=KPV('Approach Information'),
-               land_afr_apt=App('AFR Landing Airport')):
+               land_afr_apt=App('AFR Landing Airport'),
+               landing_dt=A('FDR Landing Datetime'),):
         '''
         '''
         # 1. If we have Approach Information use this as hardwork already done.
@@ -427,22 +429,33 @@ class TakeoffAirport(FlightAttributeNode):
             'Latitude Off Blocks' in available,
             'Longitude Off Blocks' in available,
         ))
-        return complete_flight or afr or other_segments
+        takeoff_dt = 'FDR Takeoff Datetime' in available
+        return afr or ((complete_flight or other_segments) and takeoff_dt)
 
-    def lookup_airport(self, lat_source, lon_source):
+    def lookup_airport(self, lat_source, lon_source, takeoff_dt):
         lat = lat_source.get_first()
         lon = lon_source.get_first()
         if lat and lon:
             handler = api.get_handler(settings.API_HANDLER)
             try:
-                airports = handler.get_nearest_airport(lat.value, lon.value)
+                airports = handler.get_nearest_airport(lat.value, lon.value, flight_dt=takeoff_dt)
             except api.NotFoundError:
                 msg = 'No takeoff airport found near coordinates (%f, %f).'
                 self.warning(msg, lat.value, lon.value)
                 # No airport was found, so fall through and try AFR.
             else:
                 if airports:
+                    # If we have flight date, filter airports: deprecated_dt > flight date, or where dep_dt is none
                     airport = min(airports, key=itemgetter('distance'))
+                    if any(a.get('deprecated_dt') for a in airports):
+                        # Get airports with same code as closest airport and select oldest.
+                        matches = list(filter(lambda a: any(a['code'].get(k) == v for k, v in airport['code'].items()), airports))
+                        airport = min(
+                            matches,
+                            key=lambda a: datetime.strptime(a['deprecated_dt'], settings.DATETIME_FORMAT)
+                            if a.get('deprecated_dt') else datetime.utcnow()
+                        )
+
                     codes = airport.get('code', {})
                     code = codes.get('icao') or codes.get('iata')or codes.get('faa') or 'Unknown'
                     self.info('Detected takeoff airport: %s from coordinates (%f, %f)', code, lat.value, lon.value)
@@ -457,12 +470,13 @@ class TakeoffAirport(FlightAttributeNode):
                toff_lon=KPV('Longitude At Liftoff'),
                toff_afr_apt=A('AFR Takeoff Airport'),
                off_block_lat=KPV('Latitude Off Blocks'),
-               off_block_lon=KPV('Longitude Off Blocks'),):
+               off_block_lon=KPV('Longitude Off Blocks'),
+               takeoff_dt=A('FDR Takeoff Datetime'),):
         '''
         '''
         # 1. If we have latitude and longitude, look for the nearest airport:
-        if toff_lat and toff_lon:
-            success = self.lookup_airport(toff_lat, toff_lon)
+        if toff_lat and toff_lon and takeoff_dt:
+            success = self.lookup_airport(toff_lat, toff_lon, takeoff_dt.value)
             if success:
                 return
 
@@ -474,8 +488,8 @@ class TakeoffAirport(FlightAttributeNode):
             return  # We found an airport in the AFR, so finish here.
 
         # 3. If we have coordinates of Aircraft moving off Blocks look for the nearest airport:
-        if off_block_lat and off_block_lon:
-            success = self.lookup_airport(off_block_lat, off_block_lon)
+        if off_block_lat and off_block_lon and takeoff_dt:
+            success = self.lookup_airport(off_block_lat, off_block_lon, takeoff_dt.value)
             if success:
                 return
 
@@ -669,7 +683,8 @@ class TakeoffRunway(FlightAttributeNode):
                toff_lon=KPV('Longitude At Liftoff'),
                accel_start_lat=KPV('Latitude At Takeoff Acceleration Start'),
                accel_start_lon=KPV('Longitude At Takeoff Acceleration Start'),
-               precision=A('Precise Positioning')):
+               precision=A('Precise Positioning'),
+               takeoff_dt=A('FDR Takeoff Datetime')):
         '''
         '''
         fallback = False
@@ -720,6 +735,8 @@ class TakeoffRunway(FlightAttributeNode):
                     self.warning('No coordinates for takeoff runway lookup.')
             if not precise:
                 kwargs.update(hint='takeoff')
+            if takeoff_dt:
+                kwargs.update(flight_dt=takeoff_dt.value)
 
             runway = nearest_runway(airport, heading, **kwargs)
             if not runway:
