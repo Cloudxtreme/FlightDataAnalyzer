@@ -12,6 +12,7 @@ Flight Data Analyzer: Approaches
 from __future__ import print_function
 
 import numpy as np
+from datetime import datetime
 from operator import itemgetter
 
 from flightdatautilities import api, units as ut
@@ -110,7 +111,7 @@ class ApproachInformation(ApproachNode):
                     seg_type=A('Segment Type')):
         if seg_type and seg_type.value == 'GROUND_ONLY':
             return False
-        required = ['Approach And Landing', 'Takeoff', 'Touchdown']
+        required = ['Approach And Landing', 'Takeoff', 'Touchdown', 'FDR Landing Datetime']
         required.append('Altitude AGL' if ac_type == helicopter else 'Altitude AAL')
         lat = 'Latitude Prepared' in available
         lon = 'Longitude Prepared' in available
@@ -153,15 +154,16 @@ class ApproachInformation(ApproachNode):
 
     def _lookup_airport_and_runway(self, _slice, precise, lowest_lat,
                                    lowest_lon, lowest_hdg, appr_ils_freq,
-                                   land_afr_apt=None, land_afr_rwy=None,
-                                   hint='approach', ac_type=aeroplane):
+                                   landing_dt, land_afr_apt=None,
+                                   land_afr_rwy=None, hint='approach',
+                                   ac_type=aeroplane):
         handler = api.get_handler(settings.API_HANDLER)
         kwargs = {}
         airport, runway, match = None, None, None
 
         # A1. If we have latitude and longitude, look for the nearest airport:
         if lowest_lat not in (None, np.ma.masked) and lowest_lon not in (None, np.ma.masked):
-            kwargs.update(latitude=lowest_lat, longitude=lowest_lon)
+            kwargs.update(latitude=lowest_lat, longitude=lowest_lon, flight_dt=landing_dt)
             try:
                 airports = handler.get_nearest_airport(**kwargs)
             except (ValueError, TypeError):
@@ -185,6 +187,17 @@ class ApproachInformation(ApproachNode):
                     filtered = [x for x in airport_info.values() if x['min_rwy_start_dist'] is not None]
                     if filtered:
                         match = min(filtered, key=itemgetter('min_rwy_start_dist'))
+                        if any(a.get('airport', {}).get('deprecated_dt') for a in filtered):
+                            match_airport = match['airport']
+                            matches = list(filter(
+                                lambda a: any(a['airport']['code'].get(k) == v for k, v in match_airport['code'].items()),
+                                filtered
+                            ))
+                            match = min(
+                                matches, key=lambda a:
+                                datetime.strptime(a['airport']['deprecated_dt'], settings.DATETIME_FORMAT)
+                                if a.get('airport', {}).get('deprecated_dt') else datetime.utcnow()
+                            )
                 else:
                     # filter by runway heading
                     airport = None
@@ -203,10 +216,26 @@ class ApproachInformation(ApproachNode):
                         filtered = [x for x in potential_airports if x['min_rwy_start_dist'] is not None]
                         if filtered:
                             match = min(filtered, key=itemgetter('min_rwy_start_dist'))
+                            if any(a.get('airport', {}).get('deprecated_dt') for a in filtered):
+                                match_airport = match['airport']
+                                matches = list(filter(
+                                    lambda a: any(a['airport']['code'].get(k) == v for k, v in match_airport['code'].items()), filtered
+                                ))
+                                match = min(
+                                    matches, key=lambda a:
+                                    datetime.strptime(a['airport']['deprecated_dt'], settings.DATETIME_FORMAT)
+                                    if a.get('airport', {}).get('deprecated_dt') else datetime.utcnow()
+                                )
                     else:
                         # filter by airport distances
                         if airports:
                             airport = min(airports, key=itemgetter('distance'))
+                            if any(a.get('deprecated_dt') for a in airports):
+                                matches = list(filter( lambda a: any(a['code'].get(k) == v for k, v in airport['code'].items()), airports))
+                                airport = min(
+                                    matches, key=lambda a: datetime.strptime(a['deprecated_dt'], settings.DATETIME_FORMAT)
+                                    if a.get('deprecated_dt') else datetime.utcnow()
+                                )
                 if match:
                     airport = match['airport']
                 if airport:
@@ -277,6 +306,7 @@ class ApproachInformation(ApproachNode):
                ils_freq=P('ILS Frequency'),
                land_afr_apt=A('AFR Landing Airport'),
                land_afr_rwy=A('AFR Landing Runway'),
+               landing_dt=A('FDR Landing Datetime'),
                lat_land=KPV('Latitude At Touchdown'),
                lon_land=KPV('Longitude At Touchdown'),
                precision=A('Precise Positioning'),
@@ -393,6 +423,7 @@ class ApproachInformation(ApproachNode):
                 lowest_lat=lowest_lat,
                 lowest_lon=lowest_lon,
                 lowest_hdg=lowest_hdg,
+                landing_dt=landing_dt.value,
                 appr_ils_freq=None,
                 ac_type=ac_type,
             )
@@ -631,6 +662,7 @@ class ApproachInformation(ApproachNode):
                     'ilsfreq': appr_ils_freq,
                     'latitude': lowest_lat,
                     'longitude': lowest_lon,
+                    'flight_dt': landing_dt,
                 }
                 if not precise:
                     runway_kwargs['hint'] = kwargs.get('hint', 'approach')

@@ -35,6 +35,7 @@ from flightdatautilities.numpy_utils import (
 from analysis_engine.settings import (
     ALTITUDE_RADIO_MAX_RANGE,
     BUMP_HALF_WIDTH,
+    DATETIME_FORMAT,
     ILS_CAPTURE,
     ILS_CAPTURE_ROC,
     ILS_ESTABLISHED_DURATION,
@@ -8243,7 +8244,7 @@ def filter_runway_heading(r, h):
     q2 = h <= rh <= 360 or 0 <= rh <= h2 % 360 if h2 > 360 else h <= rh <= h2
     return q1 or q2
 
-def nearest_runway(airport, heading, ilsfreq=None, latitude=None, longitude=None, hint=None):
+def nearest_runway(airport, heading, ilsfreq=None, latitude=None, longitude=None, hint=None, flight_dt=None):
     '''
     Helper to find the nearest runway in the database.
 
@@ -8290,6 +8291,12 @@ def nearest_runway(airport, heading, ilsfreq=None, latitude=None, longitude=None
         logger.warning('No runway information available for airport #%d.', airport['id'])
         return None
 
+    # Filter out older invalid runways if a date is provided, or filter out all deprecated runways if no date provided
+    if flight_dt:
+        runways = list(filter(lambda r: datetime.strptime(r['deprecated_dt'], DATETIME_FORMAT) >= flight_dt if r.get('deprecated_dt') else True, runways))
+    else:
+        runways = list(filter(lambda r: not r.get('deprecated_dt'), runways))
+
     # 1. Attempt to identify the runway by magnetic heading:
     assert 0 <= heading <= 360, u'Heading must be between 0° and 360° degrees.'
     runways = [runway for runway in runways if filter_runway_heading(runway, heading)]
@@ -8315,6 +8322,8 @@ def nearest_runway(airport, heading, ilsfreq=None, latitude=None, longitude=None
                 return x[0]
             elif len(x) == 0:
                 logger.warning("ILS '%s' frequency provided, no matching runway found at '%s'.", ilsfreq, airport['id'])
+            elif any(r.get('deprecated_dt') for r in x):
+                return min(x, key=lambda r: datetime.strptime(r['deprecated_dt'], DATETIME_FORMAT) if r.get('deprecated_dt') else datetime.utcnow())
             else:
                 logger.warning("ILS '%s' frequency provided, multiple matching runways found at '%s'.", ilsfreq, airport['id'])
 
@@ -8330,6 +8339,7 @@ def nearest_runway(airport, heading, ilsfreq=None, latitude=None, longitude=None
                 logger.info("Runway '%s' selected: Only runway within %d degrees of provided heading.", x[0]['identifier'], limit)
                 return x[0]
 
+    dt = datetime.utcnow()
     # 4. Attempt to identify by nearest runway:
     if latitude is not None and longitude is not None:
         assert np.all(-90 <= latitude) and np.all(latitude <= 90), 'Latitude must be between -90 and 90 degrees.'
@@ -8346,7 +8356,9 @@ def nearest_runway(airport, heading, ilsfreq=None, latitude=None, longitude=None
             if not any(args):
                 continue
             abs_dxt = np.average(np.abs(cross_track_distance(*args)))
-            if abs_dxt < distance:
+            deprecated_dt = datetime.strptime(r['deprecated_dt'], DATETIME_FORMAT) if r.get('deprecated_dt') else dt
+            if abs_dxt <= distance and deprecated_dt <= dt:
+                dt = deprecated_dt
                 distance = abs_dxt
                 runway = r
         if runway:
@@ -8354,6 +8366,18 @@ def nearest_runway(airport, heading, ilsfreq=None, latitude=None, longitude=None
             return runway
 
     # 4. Fall back to not identifying which parallel runway:
+    if any(r.get('deprecated_dt') for r in runways):
+        # Groupby RW ident. Select oldest for each ident.
+        idents = {r['identifier'] for r in runways}
+        oldest_runways = []
+        for ident in idents:
+            filtered = [r for r in runways if r['identifier'] == ident]
+            oldest_runways.append(min(
+                filtered, key=lambda r: datetime.strptime(r['deprecated_dt'], DATETIME_FORMAT)
+                if r.get('deprecated_dt') else datetime.utcnow()
+            ))
+        runways = oldest_runways
+
     idents = map(lambda runway: runway['identifier'], runways)
 
     # Check that the runway identifiers don't conflict, otherwise guess:
