@@ -2674,9 +2674,9 @@ class SmokeWarning(MultistateDerivedParameterNode):
 
 class SpeedbrakeDeployed(MultistateDerivedParameterNode):
     '''
-    Follows same logic as when deriving speedbaker from spoiler angles two
+    Follows same logic as when deriving speedbrake from spoiler angles. Two
     matching spoilers in deployed state indicates speedbrake, single side
-    depolyment indicates roll.
+    deployment indicates roll.
     '''
     values_mapping = {
         0: '-',
@@ -2688,7 +2688,8 @@ class SpeedbrakeDeployed(MultistateDerivedParameterNode):
         if family and family.value == 'B787':
             return 'Speedbrake Handle' in available
 
-        return 'Spoiler Deployed' in available or \
+        return 'Ground Spoiler Deployed' in available or \
+               'Speedbrake (Tail) Deployed' in available or \
                all_of(('Spoiler (L) Deployed', 'Spoiler (R) Deployed'), available) or \
                all_of(('Spoiler (L) (1) Deployed', 'Spoiler (R) (1) Deployed'), available) or \
                all_of(('Spoiler (L) (2) Deployed', 'Spoiler (R) (2) Deployed'), available) or \
@@ -2697,6 +2698,8 @@ class SpeedbrakeDeployed(MultistateDerivedParameterNode):
                all_of(('Spoiler (L) (5) Deployed', 'Spoiler (R) (5) Deployed'), available) or \
                all_of(('Spoiler (L) (6) Deployed', 'Spoiler (R) (6) Deployed'), available) or \
                all_of(('Spoiler (L) (7) Deployed', 'Spoiler (R) (7) Deployed'), available) or \
+               all_of(('Ground Spoiler (L) (1) Deployed', 'Ground Spoiler (R) (1) Deployed'), available) or \
+               all_of(('Ground Spoiler (L) (1) Deployed', 'Ground Spoiler (R) (1) Deployed'), available) or \
                all_of(('Spoiler (L) Outboard Deployed', 'Spoiler (R) Outboard Deployed'), available) or \
                'Spoiler' in available or \
                all_of(('Spoiler (L)', 'Spoiler (R)'), available) or \
@@ -2709,7 +2712,8 @@ class SpeedbrakeDeployed(MultistateDerivedParameterNode):
                all_of(('Spoiler (L) (7)', 'Spoiler (R) (7)'), available) or \
                all_of(('Spoiler (L) Outboard', 'Spoiler (R) Outboard'), available)
 
-    def derive(self, dep=M('Spoiler Deployed'),
+    def derive(self, dep=M('Ground Spoiler Deployed'),
+               tail=M('Speedbrake (Tail) Deployed'),
                ld=M('Spoiler (L) Deployed'),
                rd=M('Spoiler (R) Deployed'),
                l1d=M('Spoiler (L) (1) Deployed'),
@@ -2719,6 +2723,8 @@ class SpeedbrakeDeployed(MultistateDerivedParameterNode):
                l5d=M('Spoiler (L) (5) Deployed'),
                l6d=M('Spoiler (L) (6) Deployed'),
                l7d=M('Spoiler (L) (7) Deployed'),
+               gl1d=M('Ground Spoiler (L) (1) Deployed'),
+               gl2d=M('Ground Spoiler (L) (2) Deployed'),
                r1d=M('Spoiler (R) (1) Deployed'),
                r2d=M('Spoiler (R) (2) Deployed'),
                r3d=M('Spoiler (R) (3) Deployed'),
@@ -2726,6 +2732,8 @@ class SpeedbrakeDeployed(MultistateDerivedParameterNode):
                r5d=M('Spoiler (R) (5) Deployed'),
                r6d=M('Spoiler (R) (6) Deployed'),
                r7d=M('Spoiler (R) (7) Deployed'),
+               gr1d=M('Ground Spoiler (R) (1) Deployed'),
+               gr2d=M('Ground Spoiler (R) (2) Deployed'),
                loutd=M('Spoiler (L) Outboard Deployed'),
                routd=M('Spoiler (R) Outboard Deployed'),
                spoiler=P('Spoiler'),
@@ -2750,9 +2758,9 @@ class SpeedbrakeDeployed(MultistateDerivedParameterNode):
                handle=P('Speedbrake Handle'),
                family=A('Family')):
 
-        left = (ld, l1d, l2d, l3d, l4d, l5d, l6d, l7d, loutd,
+        left = (ld, l1d, l2d, l3d, l4d, l5d, l6d, l7d, gl1d, gl2d, loutd,
                 l, l1, l2, l3, l4, l5, l6, l7, lout)
-        right = (rd, r1d, r2d, r3d, r4d, r5d, r6d, r7d, routd,
+        right = (rd, r1d, r2d, r3d, r4d, r5d, r6d, r7d, gr1d, gr2d, routd,
                  r, r1, r2, r3, r4, r5, r6, r7, rout)
         pairs = list(zip(left, right))
         state = 'Deployed'
@@ -2782,7 +2790,7 @@ class SpeedbrakeDeployed(MultistateDerivedParameterNode):
             speedbrake[stepped_array == 20] = 1
             self.array = speedbrake
         else:
-            combined = [a for a in (is_deployed(p) for p in (dep, spoiler)) if a is not None]
+            combined = [a for a in (is_deployed(p) for p in (dep, tail, spoiler)) if a is not None]
             combined.extend(
                 np.ma.vstack(arrays).all(axis=0) for arrays in
                 ([is_deployed(p) for p in pair] for pair in pairs)
@@ -2828,7 +2836,7 @@ class SpeedbrakeSelected(MultistateDerivedParameterNode):
         '''
         x = available
         if family and family.value == 'BD-100':
-            return 'Speedbrake Handle' in x and 'Ground Spoiler Armed' in x
+            return 'Speedbrake Handle' in x and 'Speedbrake Armed' in x
         elif family and family.value == 'Global':
             return any_of(('Speedbrake', 'Speedbrake Handle'), available)
         elif family and family.value in ('CRJ 100/200', 'B777'):
