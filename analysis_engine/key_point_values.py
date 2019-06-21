@@ -35,6 +35,7 @@ from analysis_engine.library import (
     cycle_counter,
     cycle_finder,
     cycle_select,
+    ezclump,
     find_edges,
     find_edges_on_state_change,
     first_valid_parameter,
@@ -19808,3 +19809,117 @@ class DHSelectedAt1500FtLVO(KeyPointValueNode):
         self.create_kpvs_at_ktis(dh_selected.array,
                                  alt_descending.get(name='1500 Ft Descending'),
                                  suppress_zeros=True)
+
+class AltitudeQNHDeviationfromAltitudeSelectedMax(KeyPointValueNode):
+    '''
+    Altitude deviation from Altitude Selected which could possibly indicate
+    a level bust.
+    '''
+
+    units = ut.FT
+
+    @classmethod
+    def can_operate(cls, available):
+        # TODO remove this hack
+        alt_sel = any_of(('Altitude Selected', 'Altitude Selected (C)'), available)
+        return all_of(('Altitude QNH', 'Airborne'), available) and alt_sel
+
+    def derive(self, alt=P('Altitude QNH'),
+               alt_sel=P('Altitude Selected'),
+               airborne=S('Airborne'),
+               apps=S('Approach And Landing'),
+               alt_sel_c=P('Altitude Selected (C)')):
+        # TODO Make one Altitude Selected
+        alt_sel = alt_sel or alt_sel_c
+        dist = alt.array - alt_sel.array
+        dist = mask_outside_slices(dist, airborne.get_slices())
+        # Mask out when Altitude Selected is changing
+        alt_sel_change = np.ediff1d(alt_sel.array, to_end=0.0)
+        dist[alt_sel_change != 0.0] = np.ma.masked
+        clumps = np.ma.clump_unmasked(dist)
+
+        # Mask out the sections of approaches where the plane was on final path.
+        # Usually the plane starts at an intercept altitude and then descends
+        # on the final path. It leaves the intercept altitude and this should
+        # not be treated as a deviation. The missed approach altitude selection
+        # should also be ignored.
+        # Three cases are possible:
+        # 1. The intercept altitude is the missed approach altitude. We detect
+        #    when the plane left last that altitude and we mask out from that
+        #    point until the end of the approach phase.
+        # 2. The intercept altitude is different fom the missed approach
+        #    altitude. We ignore the missed approach altitude section until the
+        #    end of the approach phase. We then check the previous Altitude
+        #    Selected which is the intercept altitude if we maintained it for at
+        #    least 20 sec. In that case, we mask out the part where we left last
+        #    the intercept altitude.
+        # 3. There was no intercept altitude - the path was intercepted during
+        #    descent. We mask out the missed approach altitude from the start
+        #    until the end of the approach phase. We mask out the previous
+        #    Altitude Selected from the last moment we crossed it.
+        apps = apps or []
+        for app in apps:
+            idx, missed_app_clump = [(i, clump) for (i, clump) in enumerate(clumps)
+                                     if slices_overlap(clump, app.slice)][-1]
+            if self._maintain_alt(dist[missed_app_clump]):
+                # If we have maintained the missed approach altitude, it means it was
+                # also the intercept altitude for the approach. In that case, we
+                # mask out `dist` from the moment we fly below the Altitude Selected.
+                self._mask_out_leaving_altitude(dist, missed_app_clump)
+            else:
+                # Mask out the go-around Altitude Selected.
+                ignore = slice(missed_app_clump.start, app.slice.stop)
+                dist[ignore] = np.ma.masked
+
+                # Check the previous Altitude Selected section as it could be
+                # the intercept altitude for the approach. We want then to mask
+                # out the part where we're leaving it.
+                previous_idx = idx - 1
+                if previous_idx >= 0:
+                    previous_clump = clumps[previous_idx]
+                    self._mask_out_leaving_altitude(dist, previous_clump)
+
+        # Find departures from Altitude Selected
+        clumps = np.ma.clump_unmasked(dist)
+        for clump in clumps:
+            within_50ft = np.abs(dist[clump]) < 50
+            if np.any(within_50ft):
+                first_idx = np.argmax(within_50ft) + clump.start
+                max_idx = np.argmax(np.abs(dist[first_idx:clump.stop])) + first_idx
+                max_deviation = dist[max_idx]
+                if abs(max_deviation) > 100:
+                    self.create_kpv(max_idx, max_deviation)
+
+    def _maintain_alt(self, dist_array):
+        '''
+        Check if the altitude was maintained given the Distance array between
+        Altitude Selected and Altitude QNH.
+
+        :param dist_array: The array of distances between Altitude Selected and
+            Altitude QNH
+        :type dist_array: numpy.array
+
+        :returns: If altitude QNH was within 50 ft of Altitude Selected for 20
+            consecutive secs.
+        :rtype: bool
+        '''
+        within_50ft = np.abs(dist_array) < 50
+        clumps = ezclump(within_50ft)
+        return any((clump.stop - clump.start) > 20 for clump in clumps)
+
+    def _mask_out_leaving_altitude(self, dist_array, slice_):
+        '''
+        Mask out `dist_array` in `slice_` the last time it deviated more than
+        50 ft.
+
+        :param dist_array: The array of distances between Altitude Selected and
+            Altitude QNH
+        :type dist_array: numpy.array
+        :param slice_: The slice to consider in `dist_array`
+        :type slice_: slice
+        '''
+        on_final = dist_array[slice_] < -50
+        below_clumps = ezclump(on_final)
+        on_final_slice = below_clumps[-1]
+        on_final_slice = shift_slice(on_final_slice, slice_.start)
+        dist_array[on_final_slice] = np.ma.masked

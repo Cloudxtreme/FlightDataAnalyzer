@@ -6626,6 +6626,41 @@ def slices_from_ktis(kti_1, kti_2):
     return slices
 
 
+def ezclump(bool_array):
+    '''
+    From numpy/ma/extras.py
+
+    Finds the clumps (groups of data with the same values) for a 1D bool array.
+    Returns a series of slices.
+
+    :param bool_array: Array of boolean values
+    :type bool_array: numpy.array
+
+    :returns: list of slices
+    '''
+    if bool_array.ndim > 1:
+        bool_array = bool_array.ravel()
+    idx = (bool_array[1:] ^ bool_array[:-1]).nonzero()
+    idx = idx[0] + 1
+
+    if bool_array[0]:
+        if len(idx) == 0:
+            return [slice(0, bool_array.size)]
+
+        r = [slice(0, idx[0])]
+        r.extend((slice(left, right)
+                  for left, right in zip(idx[1:-1:2], idx[2::2])))
+    else:
+        if len(idx) == 0:
+            return []
+
+        r = [slice(left, right) for left, right in zip(idx[:-1:2], idx[1::2])]
+
+    if bool_array[-1]:
+        r.append(slice(idx[-1], bool_array.size))
+    return r
+
+
 def level_off_index(array, frequency, seconds, variance, _slice=None,
                    include_window=True):
     '''
