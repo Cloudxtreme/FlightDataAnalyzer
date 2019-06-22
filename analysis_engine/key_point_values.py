@@ -19812,7 +19812,7 @@ class DHSelectedAt1500FtLVO(KeyPointValueNode):
 
 class AltitudeQNHDeviationfromAltitudeSelectedMax(KeyPointValueNode):
     '''
-    Altitude deviation from Altitude Selected which could possibly indicate
+    Altitude QNH deviation from Altitude Selected which could possibly indicate
     a level bust.
     '''
 
@@ -19861,7 +19861,7 @@ class AltitudeQNHDeviationfromAltitudeSelectedMax(KeyPointValueNode):
         for app in apps:
             idx, missed_app_clump = [(i, clump) for (i, clump) in enumerate(clumps)
                                      if slices_overlap(clump, app.slice)][-1]
-            if self._maintain_alt(dist[missed_app_clump]):
+            if self._maintain_alt(dist[missed_app_clump], hz=alt.hz):
                 # If we have maintained the missed approach altitude, it means it was
                 # also the intercept altitude for the approach. In that case, we
                 # mask out `dist` from the moment we fly below the Altitude Selected.
@@ -19885,12 +19885,16 @@ class AltitudeQNHDeviationfromAltitudeSelectedMax(KeyPointValueNode):
             within_50ft = np.abs(dist[clump]) < 50
             if np.any(within_50ft):
                 first_idx = np.argmax(within_50ft) + clump.start
-                max_idx = np.argmax(np.abs(dist[first_idx:clump.stop])) + first_idx
-                max_deviation = dist[max_idx]
+                max_dev_idx = np.argmax(np.abs(dist[first_idx:clump.stop])) + first_idx
+                max_deviation = dist[max_dev_idx]
                 if abs(max_deviation) > 100:
-                    self.create_kpv(max_idx, max_deviation)
+                    self.create_kpv(max_dev_idx, max_deviation)
 
-    def _maintain_alt(self, dist_array):
+        # Find Altitude QNH moving away from Altitude Selected
+        vert_spd = np.ediff1d(dist, to_end=0.0)
+
+
+    def _maintain_alt(self, dist_array, hz=1.0):
         '''
         Check if the altitude was maintained given the Distance array between
         Altitude Selected and Altitude QNH.
@@ -19898,6 +19902,8 @@ class AltitudeQNHDeviationfromAltitudeSelectedMax(KeyPointValueNode):
         :param dist_array: The array of distances between Altitude Selected and
             Altitude QNH
         :type dist_array: numpy.array
+        :param hz: Array sampling frequency
+        :type hz: float
 
         :returns: If altitude QNH was within 50 ft of Altitude Selected for 20
             consecutive secs.
@@ -19905,7 +19911,7 @@ class AltitudeQNHDeviationfromAltitudeSelectedMax(KeyPointValueNode):
         '''
         within_50ft = np.abs(dist_array) < 50
         clumps = ezclump(within_50ft)
-        return any((clump.stop - clump.start) > 20 for clump in clumps)
+        return any((clump.stop - clump.start) > 20 * hz for clump in clumps)
 
     def _mask_out_leaving_altitude(self, dist_array, slice_):
         '''
