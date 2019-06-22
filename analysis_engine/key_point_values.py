@@ -19890,8 +19890,26 @@ class AltitudeQNHDeviationfromAltitudeSelectedMax(KeyPointValueNode):
                 if abs(max_deviation) > 100:
                     self.create_kpv(max_dev_idx, max_deviation)
 
+        '''
+        # This part of the code makes redundant findings witht he previous code
+
         # Find Altitude QNH moving away from Altitude Selected
-        vert_spd = np.ediff1d(dist, to_end=0.0)
+        # Mask out where dist is less than 100 ft
+        dist[np.abs(dist) < 100] = np.ma.masked
+        vert_spd = np.ma.ediff1d(dist, to_end=0.0)
+        dist_sign = np.sign(dist)
+        vert_spd_sign = np.sign(vert_spd)
+        combination = dist_sign * vert_spd_sign
+        # Flying away means dist is positive and vert_spd is positive or
+        # dist is negative and vert_spd is positive. So multiplying both signs
+        # is always positive in that case
+        flying_away = combination > 0
+        # Filter out small vertical speeds
+        flying_away[np.abs(vert_spd) < 5] = 0
+
+        # When flying_away is True for more than 5 (?) consecutive seconds,
+        # create KPV.
+        '''
 
 
     def _maintain_alt(self, dist_array, hz=1.0):
