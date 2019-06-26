@@ -2700,7 +2700,7 @@ class SpeedbrakeDeployed(MultistateDerivedParameterNode):
                all_of(('Spoiler (L) (6) Deployed', 'Spoiler (R) (6) Deployed'), available) or \
                all_of(('Spoiler (L) (7) Deployed', 'Spoiler (R) (7) Deployed'), available) or \
                all_of(('Ground Spoiler (L) (1) Deployed', 'Ground Spoiler (R) (1) Deployed'), available) or \
-               all_of(('Ground Spoiler (L) (1) Deployed', 'Ground Spoiler (R) (1) Deployed'), available) or \
+               all_of(('Ground Spoiler (L) (2) Deployed', 'Ground Spoiler (R) (2) Deployed'), available) or \
                all_of(('Spoiler (L) Outboard Deployed', 'Spoiler (R) Outboard Deployed'), available) or \
                'Spoiler' in available or \
                all_of(('Spoiler (L)', 'Spoiler (R)'), available) or \
