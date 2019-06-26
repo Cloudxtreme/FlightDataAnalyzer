@@ -2592,7 +2592,7 @@ class TestTurningOnGround(unittest.TestCase):
         grounded = buildsection('Grounded', 0, 24)
         turning_on_ground = TurningOnGround()
         turning_on_ground.derive(rate_of_turn, grounded)
-        expected = buildsections('Turning On Ground',[0, 9], [16,24])
+        expected = buildsections('Turning On Ground',[0, 7], [18,24])
         self.assertEqual(turning_on_ground.get_slices(), expected.get_slices())
 
     def test_turning_on_ground_phase_with_mask(self):
@@ -2606,7 +2606,7 @@ class TestTurningOnGround(unittest.TestCase):
         # Masked inside is exclusive of the range outer limits, this behaviour
         # is not consistent with TurningInAir test which is inclusive of the
         # start of the range.
-        expected = buildsections('Turning On Ground',[0, 9], [16,24])
+        expected = buildsections('Turning On Ground',[0, 7], [18,24])
         self.assertEqual(turning_on_ground.get_slices(), expected.get_slices())
 
     def test_turning_on_ground_after_takeoff_inhibited(self):
@@ -2617,7 +2617,7 @@ class TestTurningOnGround(unittest.TestCase):
         grounded = buildsection('Grounded', 0,10)
         turning_on_ground = TurningOnGround()
         turning_on_ground.derive(rate_of_turn, grounded)
-        expected = buildsections('Turning On Ground',[0, 9])
+        expected = buildsections('Turning On Ground',[0, 7])
         self.assertEqual(turning_on_ground.get_slices(), expected.get_slices())
 
 

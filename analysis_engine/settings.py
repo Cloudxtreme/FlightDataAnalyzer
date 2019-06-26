@@ -442,7 +442,7 @@ HEADING_RATE_FOR_FLIGHT_PHASES_FW = 2.0  # deg per second
 HEADING_RATE_FOR_FLIGHT_PHASES_RW = 10.0  # deg per second
 
 # Heading Rate limit for taxi event.
-HEADING_RATE_FOR_TAXI_TURNS = 3.0  # deg per second
+HEADING_RATE_FOR_TAXI_TURNS = 5.0  # deg per second
 
 # Duration of masked data to repair by interpolation for flight phase analysis
 REPAIR_DURATION = 10  # seconds
