@@ -19810,12 +19810,13 @@ class DHSelectedAt1500FtLVO(KeyPointValueNode):
                                  alt_descending.get(name='1500 Ft Descending'),
                                  suppress_zeros=True)
 
-class AltitudeQNHDeviationfromAltitudeSelectedMax(KeyPointValueNode):
+class AltitudeQNHDeviationFromAltitudeSelectedMax(KeyPointValueNode):
     '''
     Altitude QNH deviation from Altitude Selected which could possibly indicate
     a level bust.
     '''
 
+    name = 'Altitude QNH Deviation From Altitude Selected Max'
     units = ut.FT
 
     @classmethod

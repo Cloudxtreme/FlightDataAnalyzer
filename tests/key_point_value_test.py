@@ -223,7 +223,7 @@ from analysis_engine.key_point_values import (
     AltitudeLastUnstableDuringLastApproachExcludingEngThrust,
     AltitudeMax,
     AltitudeOvershootAtSuspectedLevelBust,
-    AltitudeQNHDeviationfromAltitudeSelectedMax,
+    AltitudeQNHDeviationFromAltitudeSelectedMax,
     AltitudeAALCleanConfigurationMin,
     AltitudeWithFlapMax,
     AltitudeSTDWithGearDownMax,
@@ -22112,7 +22112,7 @@ class TestTransmitInactivityDuration(unittest.TestCase, NodeTest):
 
 class TestAltitudeQNHDeviationfromAltitudeSelectedMax(unittest.TestCase, NodeTest):
 	def setUp(self):
-		self.node_class = AltitudeQNHDeviationfromAltitudeSelectedMax
+		self.node_class = AltitudeQNHDeviationFromAltitudeSelectedMax
 		self.operational_combinations = [('Altitude QNH', 'Altitude Selected', 'Airborne')]
 
 	def test_climb_and_maintain(self):
