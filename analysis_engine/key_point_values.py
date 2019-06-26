@@ -19882,9 +19882,13 @@ class AltitudeQNHDeviationfromAltitudeSelectedMax(KeyPointValueNode):
         # Find departures from Altitude Selected
         clumps = np.ma.clump_unmasked(dist)
         for clump in clumps:
-            within_50ft = np.abs(dist[clump]) < 50
-            if np.any(within_50ft):
-                first_idx = np.argmax(within_50ft) + clump.start
+            first_idx = index_at_value(dist, 0.0, clump)
+            if first_idx is None:
+                within_50ft = np.abs(dist[clump]) < 50
+                if np.any(within_50ft):
+                    first_idx = np.argmax(within_50ft) + clump.start
+            if first_idx is not None:
+                first_idx = int(first_idx)
                 max_dev_idx = np.argmax(np.abs(dist[first_idx:clump.stop])) + first_idx
                 max_deviation = dist[max_dev_idx]
                 if abs(max_deviation) > 100:
