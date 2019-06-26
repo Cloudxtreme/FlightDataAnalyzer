@@ -19866,7 +19866,9 @@ class AltitudeQNHDeviationFromAltitudeSelectedMax(KeyPointValueNode):
             if self._maintain_alt(dist[missed_app_clump], hz=alt.hz):
                 # If we have maintained the missed approach altitude, it means it was
                 # also the intercept altitude for the approach. In that case, we
-                # mask out `dist` from the moment we fly below the Altitude Selected.
+                # mask out `dist` from the moment we fly below the Altitude Selected
+                # while within the Approach flight phase.
+                missed_app_clump = slice(missed_app_clump.start, min(missed_app_clump.stop, app.slice.stop))
                 self._mask_out_leaving_altitude(dist, missed_app_clump)
             else:
                 # Mask out the go-around Altitude Selected.

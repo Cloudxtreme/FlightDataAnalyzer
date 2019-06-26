@@ -22241,6 +22241,20 @@ class TestAltitudeQNHDeviationfromAltitudeSelectedMax(unittest.TestCase, NodeTes
 		self.assertAlmostEqual(node[0].value, -1000.0)
 		self.assertEqual(node[0].index, 9)
 
+	def test_short_approach_followed_by_deviation(self):
+		airborne = buildsection('Airborne', 0, 30)
+		alt_sel = P('Altitude Selected', array=np.ma.ones(30)* 4000)
+		alt = P('Altitude QNH', array=np.ma.concatenate((
+		    np.ma.ones(20) * 4000,
+		    np.linspace(4000, 3000, num=10)
+		)))
+		apps = buildsection('Approach And Landing', 0, 8)
+		node = self.node_class()
+		node.derive(alt, alt_sel, airborne, apps, None)
+		self.assertEqual(len(node), 1)
+		self.assertAlmostEqual(node[0].value, -1000.0)
+		self.assertEqual(node[0].index, 29)
+
 
 if __name__ == '__main__':
     unittest.main()
