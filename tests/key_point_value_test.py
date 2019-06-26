@@ -22231,6 +22231,16 @@ class TestAltitudeQNHDeviationfromAltitudeSelectedMax(unittest.TestCase, NodeTes
 		node.derive(alt, alt_sel, airborne, apps, None)
 		self.assertEqual(len(node), 0)
 
+	def test_altitude_selected_rounding(self):
+		airborne = buildsection('Airborne', 0, 10)
+		alt_sel = P('Altitude Selected', array=np.ma.ones(10)* 4992.0)
+		alt = P('Altitude QNH', array=np.ma.concatenate((np.ma.ones(4) * 5000.0, np.linspace(5000.0, 4000.0, num=6))))
+		node = self.node_class()
+		node.derive(alt, alt_sel, airborne, None, None)
+		self.assertEqual(len(node), 1)
+		self.assertAlmostEqual(node[0].value, -1000.0)
+		self.assertEqual(node[0].index, 9)
+
 
 if __name__ == '__main__':
     unittest.main()
