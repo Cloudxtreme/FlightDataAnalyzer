@@ -2691,6 +2691,7 @@ class SpeedbrakeDeployed(MultistateDerivedParameterNode):
         return 'Ground Spoiler Deployed' in available or \
                'Speedbrake (Tail) Deployed' in available or \
                all_of(('Spoiler (L) Deployed', 'Spoiler (R) Deployed'), available) or \
+               all_of(('Ground Spoiler (L) Deployed', 'Ground Spoiler (R) Deployed'), available) or \
                all_of(('Spoiler (L) (1) Deployed', 'Spoiler (R) (1) Deployed'), available) or \
                all_of(('Spoiler (L) (2) Deployed', 'Spoiler (R) (2) Deployed'), available) or \
                all_of(('Spoiler (L) (3) Deployed', 'Spoiler (R) (3) Deployed'), available) or \
@@ -2716,6 +2717,8 @@ class SpeedbrakeDeployed(MultistateDerivedParameterNode):
                tail=M('Speedbrake (Tail) Deployed'),
                ld=M('Spoiler (L) Deployed'),
                rd=M('Spoiler (R) Deployed'),
+               gld=M('Ground Spoiler (L) Deployed'),
+               grd=M('Ground Spoiler (R) Deployed'),
                l1d=M('Spoiler (L) (1) Deployed'),
                l2d=M('Spoiler (L) (2) Deployed'),
                l3d=M('Spoiler (L) (3) Deployed'),
@@ -2758,9 +2761,9 @@ class SpeedbrakeDeployed(MultistateDerivedParameterNode):
                handle=P('Speedbrake Handle'),
                family=A('Family')):
 
-        left = (ld, l1d, l2d, l3d, l4d, l5d, l6d, l7d, gl1d, gl2d, loutd,
+        left = (ld, gld, l1d, l2d, l3d, l4d, l5d, l6d, l7d, gl1d, gl2d, loutd,
                 l, l1, l2, l3, l4, l5, l6, l7, lout)
-        right = (rd, r1d, r2d, r3d, r4d, r5d, r6d, r7d, gr1d, gr2d, routd,
+        right = (rd, grd, r1d, r2d, r3d, r4d, r5d, r6d, r7d, gr1d, gr2d, routd,
                  r, r1, r2, r3, r4, r5, r6, r7, rout)
         pairs = list(zip(left, right))
         state = 'Deployed'
