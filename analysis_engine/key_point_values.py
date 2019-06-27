@@ -19836,7 +19836,7 @@ class AltitudeQNHDeviationFromAltitudeSelectedMax(KeyPointValueNode):
         dist = alt.array - alt_sel_rounded
         dist = mask_outside_slices(dist, airborne.get_slices())
         # Mask out when Altitude Selected is changing
-        alt_sel_change = np.ma.ediff1d(alt_sel_rounded, to_end=0.0)
+        alt_sel_change = np.ma.ediff1d(alt_sel.array, to_end=0.0)
         dist[alt_sel_change != 0.0] = np.ma.masked
         clumps = np.ma.clump_unmasked(dist)
 

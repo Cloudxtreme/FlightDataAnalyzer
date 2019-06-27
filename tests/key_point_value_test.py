@@ -22255,6 +22255,29 @@ class TestAltitudeQNHDeviationfromAltitudeSelectedMax(unittest.TestCase, NodeTes
 		self.assertAlmostEqual(node[0].value, -1000.0)
 		self.assertEqual(node[0].index, 29)
 
+	def test_alt_sel_low_frequency(self):
+		airborne = buildsection('Airborne', 0, 40)
+		alt_sel = P('Altitude Selected',
+		            array=np.ma.concatenate((
+		                np.ma.ones(3)* 2992,
+		                np.ma.ones(3)* 2000,
+		                np.ma.array([2688]),
+		                np.ma.ones(3)* 2992,
+		            )),
+		            frequency=0.25,
+		            offset=3.0
+		)
+		alt = P('Altitude QNH',
+		        array=np.ma.concatenate((
+		            np.ma.ones(10) * 3000,
+		            np.linspace(3000, 0, num=30)
+		        ))
+		)
+		apps = buildsection('Approach And Landing', 10, 40)
+		node = self.node_class()
+		node.get_derived((alt, alt_sel, airborne, apps, None))
+		self.assertEqual(len(node), 0)
+
 
 if __name__ == '__main__':
     unittest.main()
