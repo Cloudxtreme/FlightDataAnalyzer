@@ -4622,23 +4622,13 @@ class TestSATMin(unittest.TestCase):
 
     def test_can_operate(self):
         opts = self.node_class.get_operational_combinations(ac_type=helicopter)
-        self.assertEqual(opts, [('SAT', 'Family', 'Rotors Turning')])
+        self.assertEqual(opts, [('SAT', 'Rotors Turning')])
 
     def test_derive(self,):
-        sat = P('SAT', np.ma.arange(0, 11))
-        node = self.node_class()
-        node.derive(sat)
-        self.assertEqual(len(node), 1)
-        self.assertEqual(node[0].index, 0)
-        self.assertEqual(node[0].value, 0)
-
-    def test_derive_s92(self,):
         sat = P('SAT', np.ma.arange(15,26))
-        family = A('Family', value='S92')
         rotors_turning = buildsection('Rotors Turning', 3, 9)
-
         node = self.node_class()
-        node.derive(sat, family, rotors_turning)
+        node.derive(sat, rotors_turning)
         self.assertEqual(len(node), 1)
         self.assertEqual(node[0].index, 3)
         self.assertEqual(node[0].value, 18)
