@@ -2468,7 +2468,7 @@ class SlatInTransit(MultistateDerivedParameterNode):
                slat_7=P('Slat (7) In Transit'),
                slat_8=P('Slat (8) In Transit')):
         transit_params = (slat_l1, slat_l2, slat_l3, slat_l4, slat_r1, slat_r2, slat_r3, slat_r4,
-                          slat_1, slat_2, slat_3, slat_4, slat_5, slat_6, slat_7, slat_8)        
+                          slat_1, slat_2, slat_3, slat_4, slat_5, slat_6, slat_7, slat_8)
         transit_stack = vstack_params_where_state(*[(d, 'In Transit') for d in transit_params])
 
         array = np_ma_zeros_like(transit_stack[0], dtype=np.short)
@@ -3174,6 +3174,8 @@ class StableApproachStages(object):
             # lookup descent from approach, dont zip as not guanenteed to have the same
             # number of descents and approaches
             phase = phases.get_last(within_slice=approach.slice, within_use='any')
+            if not phase:
+                continue
             # use Combined descent phase slice as it contains the data from
             # top of descent to touchdown (approach starts and finishes later)
             approach.slice = phase.slice
