@@ -1138,7 +1138,13 @@ def split_hdf_to_segments(hdf_path, aircraft_info, fallback_dt=None,
 
         # ARINC 717 data has frames or superframes. ARINC 767 will be split
         # on a minimum boundary of 4 seconds for the analyser.
-        boundary = 64 if hdf.superframe_present else 4
+        if hdf.arinc == '717':
+            boundary = 64 if hdf.superframe_present else 4
+        elif hdf.arinc == '767':
+            boundary = max(int(1 / min(hdf.frequencies)), 4)
+        else:
+            # For CSV and similar single frequency formats, there is no boundary constraint.
+            boundary = 4
 
         segment_tuples = split_segments(hdf, aircraft_info)
         frame_doubled = aircraft_info.get('Frame Doubled', False)
