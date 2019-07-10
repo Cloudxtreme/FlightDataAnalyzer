@@ -19364,7 +19364,7 @@ class DHSelectedAt1500FtLVO(KeyPointValueNode):
 
     @classmethod
     def can_operate(cls, available, series=A('Series')):
-        if not series or series.value not in ('Falcon-7X', 'Falcon-8X'):
+        if not series or series.value not in ('Falcon-7X', 'Falcon-8X', 'Falcon-2000'):
             return False
         return all_of(('Altitude When Descending', 'DH Selected'), available)
 
