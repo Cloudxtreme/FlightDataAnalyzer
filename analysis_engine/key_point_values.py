@@ -19819,19 +19819,11 @@ class AltitudeQNHDeviationFromAltitudeSelectedMax(KeyPointValueNode):
     name = 'Altitude QNH Deviation From Altitude Selected Max'
     units = ut.FT
 
-    @classmethod
-    def can_operate(cls, available):
-        # TODO remove this hack
-        alt_sel = any_of(('Altitude Selected', 'Altitude Selected (C)'), available)
-        return all_of(('Altitude QNH', 'Airborne'), available) and alt_sel
-
     def derive(self, alt=P('Altitude QNH'),
                alt_sel=P('Altitude Selected'),
                airborne=S('Airborne'),
-               apps=S('Approach And Landing'),
-               alt_sel_c=P('Altitude Selected (C)')):
-        # TODO Make one Altitude Selected
-        alt_sel = alt_sel or alt_sel_c
+               apps=S('Approach And Landing')):
+
         alt_sel_rounded = np.ma.round(alt_sel.array, decimals=-2)
         dist = alt.array - alt_sel_rounded
         dist = mask_outside_slices(dist, airborne.get_slices())
