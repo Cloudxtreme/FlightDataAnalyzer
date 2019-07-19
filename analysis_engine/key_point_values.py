@@ -5566,7 +5566,7 @@ class AltitudeAtLastFlapSelectionBeforeTouchdown(KeyPointValueNode):
                     continue
 
                 for flap_slice in reversed(flap_slices):
-                    flap_start = flap_slice.start
+                    flap_start = int(flap_slice.start)
 
                     if flap.array[flap_start-1] is np.ma.masked or flap.array[flap_start] is np.ma.masked:
                         continue
