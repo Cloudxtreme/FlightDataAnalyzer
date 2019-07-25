@@ -19851,7 +19851,6 @@ class AltitudeQNHDeviationFromAltitudeSelectedMax(KeyPointValueNode):
         #    descent. We mask out the missed approach altitude from the start
         #    until the end of the approach phase. We mask out the previous
         #    Altitude Selected from the last moment we crossed it.
-        apps = apps or []
         for app in apps:
             idx, missed_app_clump = [(i, clump) for (i, clump) in enumerate(clumps)
                                      if slices_overlap(clump, app.slice)][-1]
