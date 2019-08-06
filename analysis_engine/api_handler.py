@@ -15,8 +15,6 @@ import logging
 import numpy as np
 import six
 
-from operator import itemgetter
-
 from flightdatautilities import api
 
 from analysis_engine import library, settings

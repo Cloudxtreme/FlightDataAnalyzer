@@ -9,6 +9,39 @@ You can view the differences in tagged versions as follows:
   git log --pretty=format:"%Cblue%h %Cgreen%cn %Cred(%cr) %Creset%s %n%b %N" --graph "v0.3.2..v0.4.1"
 
 =======
+v0.43.4
+-------
+ Improvements:
+ - Split segments checks Collective where Nr is above threshold for helicopters
+
+v0.43.3
+-------
+ New KPVs:
+ - AE-2100: Airspeed Altitude Max QNH KPVs
+
+v0.43.2
+-------
+ Fixes:
+ - StableApproachStages allows phase to be missing to avoid exception
+
+v0.43.1
+-------
+ New KPVs:
+ - AE-2085 New helideck takeoff procedure KPVs
+ - AE-2126 DH Selected At 1500 Ft LVO for Falcon-7X & 8X only
+ - AE-2114 TCAS RA KPVs split into multiple flight levels
+ Improvements:
+ - AE-2157 Speedbrake Deployed custom threshold for MD-11
+ - AE-2092 Stable Approach logic changed specifically for BAE 146-301
+ - AE-2152 Hover repairs Groundspeed where data quality is low
+ - AE-2116 Helicopter segment type identification improved to incorporate Collective
+ - AE-2121 Airspeed Minus V2 improved to select most appropriate V2 source
+ - AE-2113 TCAS minimum operating height increased from 360 to 900ft AAL
+ Fixes:
+ - AE-2117 Altitude AAL At First Flap Extension Whilst Airborne ignores masked Flap
+ - AE-2140 Top Of Climbs are not ignored if Altitude STD > 1000ft for helicopters
+ - AE-2105 Altitude Radio handles power of two data jumps
+ - AE-2074 Don't apply smoothing if Go Around occured above 500ft Radio and there's no Localizer
 
 v0.42.1
 -------
@@ -107,7 +140,7 @@ v0.41.1
 
 v0.40.8
 -------
-  - AE-1793: replace Acceleration Normal parameter with Acceleration Normal At Touchdown KPV 
+  - AE-1793: replace Acceleration Normal parameter with Acceleration Normal At Touchdown KPV
   - AE-1793: change output of requested KPV - should return difference between acceleration normal touchdown and limit
 
 v0.40.7
@@ -237,9 +270,9 @@ v0.38.1
   - AE-1528: Merge Latitude and Longitude sources where two available
   - AE-1556: Helicopter: Derived parameter 'Gear-on-Ground' and 'Grounded' phase error
   - AE-1557:  Changed EngN1For5Sec500To50FtMin to stop using second_window and added unit tests
-  - AE-1562: Groundspeed Speedbrake Handle During Takeoff Max(KPV) 
+  - AE-1562: Groundspeed Speedbrake Handle During Takeoff Max(KPV)
   - AE-1565, AE-1343 & AE-1331: ILS established phase improvement and new ILS localizer/glideslope KPVs
-             Added new KPVs: 
+             Added new KPVs:
                  ILSGlideslopeEstablished1000To200Ft
                  ILSGlideslopeEstablished500To200Ft
                  ILSLocalizerEstablished1000To200Ft
@@ -310,7 +343,7 @@ v0.36.1
   - AE-1492: Visual displacement (from support ticket 15319)
              Polaris Ticket 15319
   - AE-1500: Make GFF000 event available to everyone
-  - 15530: Boeing failed files 
+  - 15530: Boeing failed files
 
   Fixes:
   - Liftoff computation now scans radio altimeter signal backwards to ensure noise during takeoff run is not misinterpreted.
@@ -449,7 +482,7 @@ KPVs Added:
  - Airspeed Minus Airspeed Selected Max
  - Eng Oil Press Low Redline Exceeded Duration
  - Eng Gas Temp Above Normal Max Limit During Takeoff 5 Min Rating Duration
- 
+
 Improvements:
  - Derived Gear Parameter
    - Gear Position
@@ -461,7 +494,7 @@ Improvements:
  - Node Dependency:
    - Added Pre processing function. Merge parameters before processing to simplify dependency
      order calculations by reducing circular dependencies
-   - Dependency order calculation updated to enfore order of dependencies 
+   - Dependency order calculation updated to enfore order of dependencies
      order taken from order of parameters passed into derive method
      previously order was based on order of dictionary keys so could change
      each time it was run
@@ -471,9 +504,9 @@ Improvements:
  - Speedbrake: Include G-VI into the derived parameter
  - SpeedbrakeSelected: Include G-VI into the derived parameter
  - Altitude Radio overflow tweak
- - Implemented A330/A340 flap configurations in relief based on Relief Engaged parameter 
+ - Implemented A330/A340 flap configurations in relief based on Relief Engaged parameter
    and Flap Lever position
- - Improvement to precise takeoff runway use two points use average distace between accel start/liftoff 
+ - Improvement to precise takeoff runway use two points use average distace between accel start/liftoff
    and runway centreline improves detection for airports such as Bilbao
 
 Fixes:
@@ -481,7 +514,7 @@ Fixes:
  - Phase: Approaches (Heli) prevent overlapping phases
  - KPV: GroundspeedWithThrustReversersDeployedMin: EPR to be prioritized over N1
  - KPV: TouchdownToPitch2DegreesAbovePitchAt60KtsDuration: Fix negative duration
- - Track smoothing to correct for the landing runway and not the approach runway (except for go-around). 
+ - Track smoothing to correct for the landing runway and not the approach runway (except for go-around).
    - New unittest TestPalmaDeMallorca
  - Use flightdatautilities.units module over hardcoded values
  - Empty slices raising
@@ -497,9 +530,9 @@ Issue with bumpversion. Use v0.33.3
 
 
 v0.33.1
-------- 
+-------
 
-KPVs added 
+KPVs added
 
  - TailRotorPedalWhileTaxiingABSMax
  - TailRotorPedalWhileTaxiingMin
@@ -512,24 +545,24 @@ Improvements:
 - Derotation slow KPV amended to handle less than 2 degree pitch variaiton on ground. Also aeroplane only kpv
 - Additional filters to get_nearest_airport. If lat/lon not precise use heading and ils freq to help detect airport. Also raise error if precise and data does not match AFR
 - Handle aligning of string Paramerters also return same array type as is passed into align_args
-- Approaches landing heading improvement for ATR aircraft. 
+- Approaches landing heading improvement for ATR aircraft.
 - python 2 & 3 compat: change from future to six
 - multistate.GearOnGround: align vertical speed if required
 - flight_phase.Climb: skip brief climbs
-  
+
 Fix:
  - Airborne: fix gear on ground check for masked values
  - A330 speedbrake parameters
- - Trap for zero length slices in Heading Variation 300 To 50 Ft 
+ - Trap for zero length slices in Heading Variation 300 To 50 Ft
  - Removal of ground track correction for go-arounds with imprecise navigation and no ILS reference.
- - AccelerationNormalMinusLoadFactorThresholdAtTouchdown: Fix NoneType when getting Roll value.  
- - AltitudeVisualizationWithoutGroundOffset: use max alt when there's no cruise phase. 
- - TrackDeviationFromRunway prevent overlapping with previous approach 
+ - AccelerationNormalMinusLoadFactorThresholdAtTouchdown: Fix NoneType when getting Roll value.
+ - AltitudeVisualizationWithoutGroundOffset: use max alt when there's no cruise phase.
+ - TrackDeviationFromRunway prevent overlapping with previous approach
 
 Docstring updates:
  - stable approach
  - altitude parameters revisited for completeness
- 
+
 
 v0.32.2
 -------
@@ -544,7 +577,7 @@ v0.32.1
   - KPV: Rotor Speed At 6 Percent Collective During Eng Start
   - KTI: Last Eng Start Before Liftoff
   - Derived: Rotor Brake Engaged
- 
+
  - Improvements:
   - Make 'Mach' available to all aircraft types. Needed to derive SAT.
   - FuelQty: better handling of not enough valid data
@@ -554,7 +587,7 @@ v0.32.1
   - Ground track algorithms
   - Aileron algorithms
   - Stable approach
-  
+
  - Fixes:
   - Better handling of invalid lat/lon in api request
   - Autoland use existance of AP 3 data to determine the no. of AP systems
@@ -565,17 +598,17 @@ v0.32.1
   - Approaches from offset ILS localizers cannot be aligned with the runway
   - Fix missing/invalid altitude data raising exceptions
   - Rate Touchdown To 60 Kts Airspeed Max handle exception if Touchdown is empty
-  - AirspeedMinusV2: prevent overlap with Airspeed Minux Vref/Vapp during touch and go 
+  - AirspeedMinusV2: prevent overlap with Airspeed Minux Vref/Vapp during touch and go
   - Split Segments
-  - SpeedbrakeHandle: add additional sources 
-  - Touchdown: prevent carrying indexes over to subsequent landings 
-  - SidestickAngle params: repair small masks to correct invalid dual imput 
+  - SpeedbrakeHandle: add additional sources
+  - Touchdown: prevent carrying indexes over to subsequent landings
+  - SidestickAngle params: repair small masks to correct invalid dual imput
   - Add units to Pitch/Roll Smooted derived parameters
   - KPV: AirspeedSelectedAtLiftoff
   - Derived: AirspeedMinusV2
 
- - Renamed 
-  - Derived: 'Altitude QNH' to 'Altitude Visualization With Ground Offset' and 
+ - Renamed
+  - Derived: 'Altitude QNH' to 'Altitude Visualization With Ground Offset' and
           'Altitude Visualization Without Ground Offset'
   - Derived: 'Altitude QNH Calculated' to 'Altitude QNH'
 
@@ -639,15 +672,15 @@ v0.31.1
 
  - Fix:
    - Derived: AAL Helicopter handle multiple GoG section in dip
-   - KPV: HeadingVariationAbove80Kts: handle rapid airspeed 
+   - KPV: HeadingVariationAbove80Kts: handle rapid airspeed
    - KPV: Control Column/Wheel Force Max KPV use max_abs_value
    - KPV: Helicopter Pitch/Roll on ground/deck added <40% collective condition where missing
    - KPV: AT Engaged AP disengaged use custom 300fpm climb criteria
    - KTI: Touchdown: fix Saab 2000 attr comparison
-   - Multidtate: APVertMode: added Vertical Speed Engaged optional dependancy 
+   - Multidtate: APVertMode: added Vertical Speed Engaged optional dependency
    - Multistate: SpeedbrakeSelected: B777 correct armed when between 0 and 1
    - Multistate APEngaged: keep or'd mask
-   - Node: Multistate: Pass state attribute to aligned param during alignment 
+   - Node: Multistate: Pass state attribute to aligned param during alignment
    - Phase: ApproachAndLanding: exclude small alt dips
    - Phase: Landing: avoid indexing past end of data
    - Phase: TransitionHoverToFlight: decreaded upper rotor tansition speed to allow for slower climbs
@@ -711,7 +744,7 @@ v0.30.1
 
  - Improvement:
    - All: Fix some numpy deprecation warnings
-   - Attribute: Landing Attributes: use those detected in Approach Information 
+   - Attribute: Landing Attributes: use those detected in Approach Information
    - Derived: AGL for flight phase 10ft hysteresis added  to ensure level flight at low altitudes does not trigger multiple KPVs.
    - Derived: MagneticVariation removed helicopter excemption
    - Derived: Groundspeed Signed Pushback extended to allow for early engine start cycle during pushback.
@@ -725,7 +758,7 @@ v0.30.1
    - library: last_valid_sample optionally remove small slices
    - library: ground_track_precise Iteration limit extended for ground track calculation
    - library: Track linking correction to handle rare cases where the reference track is masked at the point where the joining takes place.
-   - Splitting: added pre_file_kwargs 
+   - Splitting: added pre_file_kwargs
 
 
 v0.29.3
@@ -818,7 +851,7 @@ v0.29.1
  - Fix:
    - Wholly masked segments ignored in ClimbCruiseDescent flight phase.
    - Latitude at liftoff fix for S76
-   - split_hdf_to_segments: ignore brief aspd spikes 
+   - split_hdf_to_segments: ignore brief aspd spikes
    - coreg:
      - avoid python float rounding
      - handle negative sqrt along with ValueError

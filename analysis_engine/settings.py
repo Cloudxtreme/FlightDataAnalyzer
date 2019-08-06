@@ -38,7 +38,7 @@ NODE_HELICOPTER_MODULE_PATHS = [
     'analysis_engine.helicopter.derived_parameters',
     'analysis_engine.helicopter.multistate_parameters',
     'analysis_engine.helicopter.key_point_values',
-    #'analysis_engine.helicopter.key_time_instances',
+    'analysis_engine.helicopter.key_time_instances',
     #'analysis_engine.helicopter.flight_attribute',
     'analysis_engine.helicopter.flight_phase',
 ]
@@ -189,9 +189,17 @@ ALTITUDE_AAL_LAG_TC = 3.0
 # climbing above 15000 ft and below 10000 ft.
 ALTITUDE_FOR_CLB_CRU_DSC = 12500
 
+# The maximum signal range we accommodate.
+ALTITUDE_RADIO_MAX_RANGE = 5000.0 # ft
+
 # The maximum radio altimeter offset we are able to compensate for.
 # NB: Negative offsets are not corrected, assumed to be from oleo compression.
 ALTITUDE_RADIO_OFFSET_LIMIT = 10.0
+
+# When in the cruise, an aircraft can get short periods of radio altimeter 
+# signal when overflying other aircraft. This period is suppressed to avoid
+# nuisance returns.
+ALTITUDE_RADIO_OVERFLY_SUPPRESSION = 30.0
 
 # Minimum descent height range for an approach and landing phase.
 APPROACH_MIN_DESCENT = 500
@@ -291,7 +299,7 @@ HOLDING_MIN_TIME = 5*60  #sec
 # Maximum groundspeed over the period in the hold. This segregates true
 # holds, where the effective speed is significantly reduced (that's the point
 # of the hold), from curving departures or approaches.
-HOLDING_MAX_GSPD = 60.0  # kts
+HOLDING_MAX_GSPD = 90.0  # kts
 
 # Threshold for flight phase altitude hysteresis.
 HYSTERESIS_FPALT = 200  # ft

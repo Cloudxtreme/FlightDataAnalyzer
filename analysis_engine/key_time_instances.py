@@ -5,6 +5,14 @@ import six
 
 from math import ceil, floor
 
+from flightdatautilities import units as ut
+from flightdatautilities.geometry import great_circle_distance__haversine
+
+from analysis_engine.node import (
+    A, M, P, S, KTI, App,
+    helicopter, KeyTimeInstanceNode
+)
+
 from analysis_engine.library import (
     all_deps,
     all_of,
@@ -14,13 +22,13 @@ from analysis_engine.library import (
     find_toc_tod,
     first_valid_sample,
     hysteresis,
-    index_at_distance,
     index_at_value,
     is_index_within_slice,
     last_valid_sample,
     max_value,
     min_value,
     minimum_unmasked,
+    moving_average,
     np_ma_masked_zeros_like,
     peak_curvature,
     rate_of_change,
@@ -33,15 +41,10 @@ from analysis_engine.library import (
     slices_not,
     slices_overlap,
     slices_remove_small_gaps,
-    value_at_index,
+    value_at_index
 )
 
-from analysis_engine.node import (
-    A, App, M, P, S, KTI, KeyTimeInstanceNode,
-    aeroplane, aeroplane_only, helicopter, helicopter_only)
 
-from flightdatautilities import units as ut
-from flightdatautilities.geometry import great_circle_distance__haversine
 
 from analysis_engine.settings import (
     CLIMB_THRESHOLD,
@@ -59,6 +62,8 @@ from analysis_engine.settings import (
     TRANSITION_ALTITUDE,
     VERTICAL_SPEED_FOR_LIFTOFF,
 )
+
+from flightdatautilities.numpy_utils import slices_int
 
 
 def sorted_valid_list(x):
@@ -236,70 +241,125 @@ class ClimbAccelerationStart(KeyTimeInstanceNode):
     @classmethod
     def can_operate(cls, available, eng_type=A('Engine Propulsion')):
         spd_sel = 'Airspeed Selected' in available
+        spd = all_of(('Airspeed', 'Flap Lever Set'), available)
         jet = (eng_type and eng_type.value == 'JET' and
                'Throttle Levers' in available)
         prop = (eng_type and eng_type.value == 'PROP' and
                 'Eng (*) Np Max' in available)
         alt = all_of(('Engine Propulsion', 'Altitude AAL For Flight Phases'), available)
-        return 'Initial Climb' in available and \
-               (spd_sel or jet or prop or alt) and \
+        return all_of(('Initial Climb', 'Altitude When Climbing'), available) and \
+               (spd_sel or spd or jet or prop or alt) and \
                not (eng_type and eng_type.value == 'ROTOR')
 
 
     def derive(self, alt_aal=P('Altitude AAL For Flight Phases'),
                initial_climbs=S('Initial Climb'),
+               alt_climbing=KTI('Altitude When Climbing'),
                spd_sel=P('Airspeed Selected'),
+               spd_sel_fmc=P('Airspeed Selected (FMC)'),
                eng_type=A('Engine Propulsion'),
                eng_np=P('Eng (*) Np Max'),
-               throttle=P('Throttle Levers')):
-        #_slice = initial_climbs.get_first().slice if initial_climbs else None
-        if spd_sel and spd_sel.frequency >= 0.125 and initial_climbs:
-            # Use first Airspeed Selected change in Initial Climb.
+               throttle=P('Throttle Levers'),
+               spd=P('Airspeed'),
+               flap=KTI('Flap Lever Set')):
+
+        if spd_sel and spd_sel.frequency >= 0.125:
+            # Use first Airspeed Selected change in Initial Climb up to 4000 Ft
             _slice = initial_climbs.get_aligned(spd_sel).get_first().slice
-            spd_sel.array = spd_sel.array[_slice]
-            spd_sel_threshold = 5 / spd_sel.frequency
-            spd_sel_roc = rate_of_change(spd_sel, 2 * (1 / spd_sel.frequency))
-            index = index_at_value(spd_sel_roc, spd_sel_threshold)
+            climbing_4000 = alt_climbing.get_aligned(spd_sel).get(name='4000 Ft Climbing').get_first()
+            _slice = slice(_slice.start, int(climbing_4000.index) if climbing_4000 else _slice.stop)
+
+            def index_at_first_spd_sel_change():
+                for spd_ref in (spd_sel, spd_sel_fmc):
+                    if spd_ref is None:
+                        continue
+                    spd_ref.array = spd_ref.array[_slice]
+
+                    spd_ref_threshold = 5 * spd_ref.frequency
+                    spd_ref_roc = rate_of_change(spd_ref, 2 * (1 / spd_ref.frequency))
+                    index = index_at_value(spd_ref_roc, spd_ref_threshold)
+                    if index:
+                        yield index, spd_ref.frequency, spd_ref.offset
+
+            try:
+                index, frequency, offset = min(index_at_first_spd_sel_change())
+            except ValueError:
+                # No index was found
+                index = None
+
             if index:
-                self.frequency = spd_sel.frequency
-                self.offset = spd_sel.offset
+                self.frequency = frequency
+                self.offset = offset
                 self.create_kti(index + (_slice.start or 0))
+                return
+
+        if spd and flap:
+            # Base on airspeed increase after first flap retraction
+            # Align to Airspeed.
+            _slice = initial_climbs.get_aligned(spd).get_first().slice
+            climbing_4000 = alt_climbing.get_aligned(spd).get(name='4000 Ft Climbing').get_first()
+            if climbing_4000:
+                _slice = slice(_slice.start, int(climbing_4000.index))
+
+            # Find when flaps were first being retracted
+            flap = flap.get_aligned(spd)
+            flap_retraction = flap.get_next(_slice.start, within_slice=_slice)
+            if flap_retraction is not None:
+                _slice = slice(_slice.start, int(flap_retraction.index))
+
+                # Find when the airspeed started to increase after first
+                # flap retraction
+                spd.array = spd.array[_slice]
+                spd_avg = moving_average(spd.array, window=7)
+                diff = np.ma.ediff1d(spd_avg)
+                # Scanning from right to left, we determine when the speed
+                # stopped decreasing. Ths is the point where the speed started
+                # to increase when looking from left to right.
+                # Negative index as we are looking from the end
+                lowest_spd_idx = - np.ma.argmax(diff[::-1] <= 0.0)
+                index = (_slice.stop or len(spd.array)) + lowest_spd_idx
+                self.frequency = spd.frequency
+                self.offset = spd.offset
+                self.create_kti(index)
                 return
 
         if eng_type:
             if eng_type.value == 'JET':
-                if throttle and initial_climbs:
-                    # Align to throttle.
-                    _slice = initial_climbs.get_aligned(throttle).get_first().slice
-                    # Base on first engine throttle change after liftoff.
-                    # XXX: Width is too small for low frequency params.
-                    throttle.array = throttle.array[_slice]
-                    throttle_threshold = 2 / throttle.frequency
-                    throttle_roc = np.ma.abs(rate_of_change(throttle, 2 * (1 / throttle.frequency)))
-                    index = index_at_value(throttle_roc, throttle_threshold)
-                    if index:
-                        self.frequency = throttle.frequency
-                        self.offset = throttle.offset
-                        self.create_kti(index + (_slice.start or 0))
-                        return
+                # Base on first engine throttle change after liftoff.
+                # Align to throttle.
+                _slice = initial_climbs.get_aligned(throttle).get_first().slice
+                climbing_4000 = alt_climbing.get_aligned(throttle).get(name='4000 Ft Climbing').get_first()
+                _slice = slice(_slice.start, int(climbing_4000.index) if climbing_4000 else _slice.stop)
+                # XXX: Width is too small for low frequency params.
+                throttle.array = throttle.array[_slice]
+                throttle_threshold = 2 / throttle.frequency
+                throttle_roc = np.ma.abs(rate_of_change(throttle, 2 * (1 / throttle.frequency)))
+                index = index_at_value(throttle_roc, throttle_threshold)
+                if index:
+                    self.frequency = throttle.frequency
+                    self.offset = throttle.offset
+                    self.create_kti(index + (_slice.start or 0))
+                    return
 
                 alt = 800
 
             elif eng_type.value == 'PROP':
-                if eng_np and initial_climbs:
-                    # Align to Np.
-                    _slice = initial_climbs.get_aligned(eng_np).get_first().slice
-                    # Base on first Np drop after liftoff.
-                    # XXX: Width is too small for low frequency params.
-                    eng_np.array = hysteresis(eng_np.array[_slice], 4 / eng_np.hz)
-                    eng_np_threshold = -0.5 / eng_np.frequency
-                    eng_np_roc = rate_of_change(eng_np, 2 * (1 / eng_np.frequency))
-                    index = index_at_value(eng_np_roc, eng_np_threshold)
-                    if index:
-                        self.frequency = eng_np.frequency
-                        self.offset = eng_np.offset
-                        self.create_kti(index + (_slice.start or 0))
-                        return
+                # Base on first Np drop after liftoff.
+                # Align to Np.
+                _slice = initial_climbs.get_aligned(eng_np).get_first().slice
+                climbing_4000 = alt_climbing.get_aligned(eng_np).get(name='4000 Ft Climbing').get_first()
+                if climbing_4000:
+                    _slice = slice(_slice.start, int(climbing_4000.index))
+                # XXX: Width is too small for low frequency params.
+                eng_np.array = hysteresis(eng_np.array[_slice], 4 / eng_np.hz)
+                eng_np_threshold = -0.5 / eng_np.frequency
+                eng_np_roc = rate_of_change(eng_np, 2 * (1 / eng_np.frequency))
+                index = index_at_value(eng_np_roc, eng_np_threshold)
+                if index:
+                    self.frequency = eng_np.frequency
+                    self.offset = eng_np.offset
+                    self.create_kti(index + (_slice.start or 0))
+                    return
 
                 alt = 400
 
@@ -310,7 +370,9 @@ class ClimbAccelerationStart(KeyTimeInstanceNode):
                 ics = initial_climbs.get_aligned(alt_aal)
                 if ics.get_slices():
                     _slice = ics.get_first().slice
-                    self.create_kti(index_at_value(alt_aal.array, alt, _slice=_slice))
+                    index = index_at_value(alt_aal.array, alt, _slice=_slice)
+                    if index:
+                        self.create_kti(index)
 
 
 class ClimbThrustDerateDeselected(KeyTimeInstanceNode):
@@ -683,32 +745,6 @@ class ExitHold(KeyTimeInstanceNode):
             self.create_kti(hold.slice.stop)
 
 
-class EnterTransitionFlightToHover(KeyTimeInstanceNode):
-
-    can_operate = helicopter_only
-
-    def derive(self, holds=S('Transition Flight To Hover')):
-        for hold in holds:
-            self.create_kti(hold.slice.start)
-
-class ExitTransitionFlightToHover(KeyTimeInstanceNode):
-
-    can_operate = helicopter_only
-
-    def derive(self, holds=S('Transition Flight To Hover')):
-        for hold in holds:
-            self.create_kti(hold.slice.stop)
-
-
-class ExitTransitionHoverToFlight(KeyTimeInstanceNode):
-
-    can_operate = helicopter_only
-
-    def derive(self, holds=S('Transition Hover To Flight')):
-        for hold in holds:
-            self.create_kti(hold.slice.stop)
-
-
 class EngFireExtinguisher(KeyTimeInstanceNode):
     def derive(self, e1f=P('Eng (1) Fire Extinguisher'),
                e2f=P('Eng (2) Fire Extinguisher'),
@@ -870,7 +906,7 @@ class FirstFlapExtensionWhileAirborne(KeyTimeInstanceNode):
             retracted = flap.array == '0'
         mask = np.ma.getmaskarray(retracted)
         for air in airborne:
-            cleans = runs_of_ones(retracted[air.slice])
+            cleans = runs_of_ones(retracted[air.slice], skip_mask=True)
             for clean in cleans:
                 # Skip the case where the airborne slice ends:
                 if clean.stop == air.slice.stop - air.slice.start:
@@ -1157,7 +1193,7 @@ class TakeoffAccelerationStart(KeyTimeInstanceNode):
                                 accel_sel = alt_start
                         start_accel = accel_sel.start
 
-            if start_accel is None:
+            if start_accel is None or start_accel == []:
                 '''
                 A quite respectable "backstop" is from the rate of change of
                 airspeed. We use this if the acceleration is not available or
@@ -1273,8 +1309,8 @@ class Liftoff(KeyTimeInstanceNode):
                                           to_scan)
                 # and try to augment this with another measure
                 if acc_norm:
-                    idx = np.ma.argmax(acc_norm.array[to_scan])
-                    if acc_norm.array[to_scan][idx] > 1.2:
+                    idx = np.ma.argmax(acc_norm.array[slices_int(to_scan)])
+                    if acc_norm.array[slices_int(to_scan)][idx] > 1.2:
                         index_acc = idx + back_6
 
             if alt_rad:
@@ -1283,15 +1319,15 @@ class Liftoff(KeyTimeInstanceNode):
             if gog:
                 # Try using Gear On Ground switch
                 edges = find_edges_on_state_change(
-                    'Ground', gog.array[to_scan], change='leaving')
+                    'Ground', gog.array[slices_int(to_scan)], change='leaving')
                 if edges:
                     # use the last liftoff point
                     index = edges[-1] + back_6
                     # Check we were within 5ft of the ground when the switch triggered.
                     if alt_rad is None:
                         index_gog = index
-                    elif alt_rad.array[index] < 5.0 or \
-                            alt_rad.array[index] is np.ma.masked:
+                    elif alt_rad.array[int(index)] < 5.0 or \
+                            alt_rad.array[int(index)] is np.ma.masked:
                         index_gog = index
                     else:
                         index_gog = None
@@ -1322,7 +1358,7 @@ class Liftoff(KeyTimeInstanceNode):
             dt_pre = 5
             hz = self.frequency
             timebase=np.linspace(-dt_pre*hz, dt_pre*hz, 2*dt_pre*hz+1)
-            plot_period = slice(floor(air.slice.start-dt_pre*hz), floor(air.slice.start-dt_pre*hz+len(timebase)))
+            plot_period = slice(int(floor(air.slice.start-dt_pre*hz)), int(floor(air.slice.start-dt_pre*hz+len(timebase))))
             plt.figure()
             plt.plot(0, 13.0,'vb', markersize=8)
             if vert_spd:
@@ -1416,7 +1452,7 @@ class TouchAndGo(KeyTimeInstanceNode):
     """
     def derive(self, alt_aal=P('Altitude AAL'), go_around_and_climbouts=S('Go Around And Climbout')):
         for ga in go_around_and_climbouts:
-            ga_index = ga.start_edge
+            ga_index = int(ga.start_edge or ga.slice.start)
             while ga_index < ga.stop_edge:
                 if alt_aal.array[ga_index] == 0.0:
                     self.create_kti(ga_index)
@@ -1448,6 +1484,11 @@ class Touchdown(KeyTimeInstanceNode):
 
     @classmethod
     def can_operate(cls, available, ac_type=A('Aircraft Type'), seg_type=A('Segment Type')):
+        # if we have 'Acceleration Longitudinal' hold off until
+        # 'Acceleration Longitudinal Offset Removed' can be processed
+        if 'Acceleration Longitudinal' in available and \
+           'Acceleration Longitudinal Offset Removed' not in available:
+            return False
         if ac_type and ac_type.value == 'helicopter':
             return 'Airborne' in available
         elif seg_type and seg_type.value in ('GROUND_ONLY', 'NO_MOVEMENT', 'MID_FLIGHT', 'START_ONLY'):
@@ -1466,7 +1507,9 @@ class Touchdown(KeyTimeInstanceNode):
                family=A('Family'),
                # helicopter
                airs=S('Airborne'),
-               ac_type=A('Aircraft Type')):
+               ac_type=A('Aircraft Type'),
+               # Only used in can_operate
+               accel=P('Acceleration Longitudinal')):
         if ac_type and ac_type.value == 'helicopter':
             for air in airs:
                 self.create_kti(air.stop_edge)
@@ -1503,7 +1546,7 @@ class Touchdown(KeyTimeInstanceNode):
                     # (i.e. we ignore bounces)
                     index = edges[0] + land.slice.start
                     # Check we were within 10ft of the ground when the switch triggered.
-                    if not alt or alt.array[index] < 10.0:
+                    if not alt or alt.array[int(index)] < 10.0:
                         index_gog = index
 
             if manufacturer and manufacturer.value == 'Saab' and \
@@ -1522,7 +1565,7 @@ class Touchdown(KeyTimeInstanceNode):
             # With an estimate from the height and perhaps gear switch, set
             # up a period to scan across for accelerometer based
             # indications...
-            period_end = ceil(index_ref + dt_post * hz)
+            period_end = int(ceil(index_ref + dt_post * hz))
             period_start = max(floor(index_ref - dt_pre * hz), 0)
             if alt_rad:
                 # only look for 5ft altitude if Radio Altitude is recorded,
@@ -1533,7 +1576,7 @@ class Touchdown(KeyTimeInstanceNode):
             period = slice(period_start, period_end)
 
             if acc_long:
-                drag = np.ma.copy(acc_long.array[period])
+                drag = np.ma.copy(acc_long.array[slices_int(period)])
                 drag = np.ma.where(drag > 0.0, 0.0, drag)
 
                 # Look for inital wheel contact where there is a sudden spike in Ax.
@@ -1572,7 +1615,7 @@ class Touchdown(KeyTimeInstanceNode):
                     index_decel += period.start
 
             if acc_norm:
-                lift = acc_norm.array[period]
+                lift = acc_norm.array[slices_int(period)]
                 mean = np.mean(lift)
                 lift = np.ma.masked_less(lift-mean, 0.0)
                 bump = np_ma_masked_zeros_like(lift)
@@ -1611,7 +1654,6 @@ class Touchdown(KeyTimeInstanceNode):
             # ...to find the best estimate...
             # If we have lots of measures, bias towards the earlier ones.
             #index_tdn = np.median(index_list[:4])
-
             if len(index_list) == 0:
                 # No clue where the aircraft landed. Give up.
                 return
@@ -1626,6 +1668,11 @@ class Touchdown(KeyTimeInstanceNode):
                     index_tdn = min(index_tdn, index_gog)
 
             # self.create_kti(index_tdn)
+            self.info("Touchdown: Selected index: %s @ %sHz. Complete list (index_alt: %s, "\
+                      "index_gog: %s, index_wheel_touch: %s,  index_brake: %s, "\
+                      "index_decel: %s, index_dax: %s, index_z: %s)",
+                      index_tdn, self.frequency, index_alt, index_gog, index_wheel_touch,
+                      index_brake, index_decel, index_dax, index_z)
             self.create_kti(index_tdn)
 
             '''
@@ -1636,7 +1683,7 @@ class Touchdown(KeyTimeInstanceNode):
             self.info(name)
             tz_offset = index_ref - period.start
             timebase=np.linspace(-tz_offset, dt_post*hz, tz_offset+(dt_post*hz)+1)
-            plot_period = slice(floor(index_ref-tz_offset), floor(index_ref-tz_offset+len(timebase)))
+            plot_period = slice(int(floor(index_ref-tz_offset)), int(floor(index_ref-tz_offset+len(timebase))))
             plt.figure()
             if alt:
                 plt.plot(timebase, alt.array[plot_period], 'o-r')
@@ -1776,6 +1823,8 @@ class AltitudeWhenDescending(KeyTimeInstanceNode):
     def derive(self, descending=S('Descent'),
                alt_aal=P('Altitude AAL'),
                alt_std=P('Altitude STD Smoothed')):
+        alt_aal=repair_mask(alt_aal.array, frequency=alt_aal.frequency, copy=True)
+        alt_std=repair_mask(alt_std.array, frequency=alt_std.frequency, copy=True)
         for descend in descending:
             for alt_threshold in self.NAME_VALUES['altitude']:
                 # Will trigger a single KTI per height (if threshold is
@@ -1784,10 +1833,10 @@ class AltitudeWhenDescending(KeyTimeInstanceNode):
                 # each height.
                 if alt_threshold <= TRANSITION_ALTITUDE:
                     # Use height above airfield.
-                    alt = alt_aal.array
+                    alt = alt_aal
                 else:
                     # Use standard altitudes.
-                    alt = alt_std.array
+                    alt = alt_std
 
                 index = index_at_value(alt, alt_threshold,
                                        slice(descend.slice.stop,
@@ -1814,7 +1863,7 @@ class AltitudeBeforeLevelFlightWhenClimbing(KeyTimeInstanceNode):
         not_level = [slice(0, ordered_level[0].start)] + \
             slices_not(ordered_level)
 
-        for n, level in enumerate(ordered_level):
+        for n, level in enumerate(slices_int(ordered_level)):
             climb_descent = not_level[n]
             level_height = np.ma.median(aal.array[level])
             if level_height < 3000:
@@ -1854,7 +1903,7 @@ class AltitudeBeforeLevelFlightWhenDescending(KeyTimeInstanceNode):
         not_level = [slice(0, ordered_level[0].start)] + \
             slices_not(ordered_level)
 
-        for n, level in enumerate(ordered_level):
+        for n, level in enumerate(slices_int(ordered_level)):
             climb_descent = not_level[n]
             level_height = np.ma.median(aal.array[level])
             if level_height < 3000:
@@ -1954,7 +2003,7 @@ class DistanceToTouchdown(KeyTimeInstanceNode):
         for touchdown in touchdowns:
             for d in self.NAME_VALUES['distance']:
                 index = index_at_value(dtl.array, d,
-                                       slice(floor(touchdown.index), last_tdwn_idx, -1))
+                                       slice(int(floor(touchdown.index)), last_tdwn_idx, -1))
                 if index:
                     # may not have travelled far enough to find distance threshold.
                     self.create_kti(index, distance=d)
@@ -1981,9 +2030,9 @@ class Autoland(KeyTimeInstanceNode):
                family=A('Family')):
         family = family.value if family else None
         for td in touchdowns:
-            if ap.array[td.index] == 'Dual' and family not in self.TRIPLE_FAMILIES:
+            if ap.array[int(td.index)] == 'Dual' and family not in self.TRIPLE_FAMILIES:
                 self.create_kti(td.index)
-            elif ap.array[td.index] == 'Triple':
+            elif ap.array[int(td.index)] == 'Triple':
                 self.create_kti(td.index)
             else:
                 # in Single OR Dual and Triple was required

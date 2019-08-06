@@ -18,9 +18,9 @@ from analysis_engine.node import P
 from analysis_engine.library import (align,
                                      blend_parameters,
                                      calculate_timebase,
-                                     closest_unmasked_value,
                                      hash_array,
                                      min_value,
+                                     mask_outside_slices,
                                      normalise,
                                      repair_mask,
                                      rate_of_change,
@@ -37,6 +37,10 @@ from hdfaccess.file import hdf_file
 from hdfaccess.utils import segment_boundaries, write_segment
 
 from flightdatautilities.filesystem_tools import sha_hash_file
+from flightdatautilities.numpy_utils import (
+    slices_int,
+    py2round,
+)
 from six import string_types
 
 
@@ -109,14 +113,13 @@ def _segment_type_and_slice(speed_array, speed_frequency,
     * 'MID_FLIGHT'
     """
 
-    speed_start = start * speed_frequency
-    speed_stop = stop * speed_frequency
+    speed_start = int(start * speed_frequency)
+    speed_stop = int(stop * speed_frequency)
     speed_array = speed_array[speed_start:speed_stop]
 
-    heading_start = start * heading_frequency
-    heading_stop = stop * heading_frequency
+    heading_start = int(start * heading_frequency)
+    heading_stop = int(stop * heading_frequency)
     heading_array = heading_array[heading_start:heading_stop]
-
 
     # remove small gaps between valid data, e.g. brief data spikes
     unmasked_slices = slices_remove_small_gaps(
@@ -138,9 +141,7 @@ def _segment_type_and_slice(speed_array, speed_frequency,
     vspd_threshold_exceedance = None
 
     if vspeed:
-        vert_spd_start = start * vspeed.frequency
-        vert_spd_stop = stop * vspeed.frequency
-        vert_spd_array = vspeed.array[vert_spd_start:vert_spd_stop]
+        vert_spd_array = vspeed.array[int(start * vspeed.frequency):int(stop * vspeed.frequency)]
         vspd_threshold_exceedance = \
             (np.ma.sum(vert_spd_array > thresholds['vertical_speed_max']) / vspeed.frequency) > thresholds['min_duration'] or \
             (np.ma.sum(vert_spd_array < thresholds['vertical_speed_min']) / vspeed.frequency) > thresholds['min_duration']
@@ -148,11 +149,11 @@ def _segment_type_and_slice(speed_array, speed_frequency,
     # Find out if the aircraft moved
     if aircraft_info and aircraft_info['Aircraft Type'] == 'helicopter':
         # if any gear params use them
-        gog = next(iter([hdf.get(name) for name in ('Gear On Ground', 'Gear (R) On Ground', 'Gear (L) On Ground')]))
+        gog = next((p for p in (hdf.get(n) for n in ('Gear On Ground', 'Gear (R) On Ground', 'Gear (L) On Ground')) if p), None)
         if gog:
-            gog_start_idx = start * gog.frequency
-            gog_stop_idx = stop * gog.frequency
-            gog_window_samples = 120 * gog.frequency
+            gog_start_idx = int(start * gog.frequency)
+            gog_stop_idx = int(stop * gog.frequency)
+            gog_window_samples = int(120 * gog.frequency)
             gog_min_samples = 4 * gog.frequency
             gog_start_slices = sorted(slices_of_runs(
                 gog.array[gog_start_idx:gog_start_idx + gog_window_samples],
@@ -165,7 +166,10 @@ def _segment_type_and_slice(speed_array, speed_frequency,
                 # 90+% at beginning or end of segment.
                 slow_start = (gog.array[gog_start_slices[0].start] == 'Ground')
                 slow_stop = (gog.array[gog_stop_slices[-1].stop - 1] == 'Ground')
-            temp = np.ma.array(gog.array[gog_start_idx:gog_stop_idx].data, mask=gog.array[gog_start_idx:gog_stop_idx].mask)
+            temp = np.ma.array(
+                gog.array[gog_start_idx:gog_stop_idx].data,
+                mask=gog.array[gog_start_idx:gog_stop_idx].mask
+            )
             gog_test = np.ma.masked_less(temp, 1.0)
             # We have seeen 12-second spurious gog='Air' signals during rotor rundown. Hence increased limit.
             did_move = slices_remove_small_slices(np.ma.clump_masked(gog_test),
@@ -176,30 +180,40 @@ def _segment_type_and_slice(speed_array, speed_frequency,
 
         # Test the collective. If the collective is below the COLLECTIVE_ON_GROUND_THRESHOLD
         # then the helicopter is likely be on the ground and we can test for slow_start and slow_stop.
-        col = next(iter([hdf.get(name) for name in ('Collective', 'Collective (1)', 'Collective (2)')]))
+        col = next((p for p in (hdf.get(n) for n in ('Collective', 'Collective (1)', 'Collective (2)')) if p), None)
         if col:
-            if unmasked_slices:
+            col_window_sample = int(120 * col.frequency)
+            col_min_sample = int(4 * col.frequency)
+            speedy = np.ma.where(speed_array > thresholds['speed_threshold'])[0]
+            if len(speedy):
+                col_start = int((speed_start + speedy[0]) * (col.frequency / speed_frequency))
+                col_stop = int((speed_start + speedy[-1]) * (col.frequency / speed_frequency))
+                try:  # shift start backwards to earlier low Collective value
+                    col_start -= col_window_sample + np.ma.where(col.array[col_start - col_window_sample:col_start])[0][0]
+                except IndexError:
+                    pass
+                try: # shift stop forwards to later low Collective value
+                    col_stop += np.ma.where(col.array[col_stop:col_stop + col_window_sample])[0][-1]
+                except IndexError:
+                    pass
+            elif unmasked_slices:
                 # With some of the pre-split data, the collective appears to be padded
                 # starting and finishing inside the speed_array.
                 # Use unmasked speed slices as the start/end indices for collective window
-                col_start_idx = unmasked_slices[0].start/speed_frequency * col.frequency
-                col_stop_idx = (unmasked_slices[-1].stop-1)/speed_frequency * col.frequency
+                col_start = int(unmasked_slices[0].start * (col.frequency / speed_frequency))
+                col_stop = int((unmasked_slices[-1].stop - 1) * (col.frequency / speed_frequency))
             else:
-                col_start_idx = start * col.frequency
-                col_stop_idx = stop * col.frequency
-            col_window_sample = 120 * col.frequency
-            col_min_sample = 4 * col.frequency
-            col_start_slice = runs_of_ones(
-                col.array[col_start_idx:col_start_idx+col_window_sample] < settings.COLLECTIVE_ON_GROUND_THRESHOLD,
-                min_samples=col_min_sample
-            )
-            col_stop_slice = runs_of_ones(
-                col.array[col_stop_idx-col_window_sample:col_stop_idx] < settings.COLLECTIVE_ON_GROUND_THRESHOLD,
-                min_samples=col_min_sample
-            )
-            slow_start = True if col_start_slice else False
-            slow_stop = True if col_stop_slice else False
+                col_start = int(start * col.frequency)
+                col_stop = int(stop * col.frequency)
 
+            slow_start = runs_of_ones(
+                col.array[col_start:col_start+col_window_sample] < settings.COLLECTIVE_ON_GROUND_THRESHOLD,
+                min_samples=col_min_sample
+            )
+            slow_stop = runs_of_ones(
+                col.array[col_stop-col_window_sample:col_stop] < settings.COLLECTIVE_ON_GROUND_THRESHOLD,
+                min_samples=col_min_sample
+            )
     else:
         # Check Heading change for fixed wing.
         if eng_arrays is not None:
@@ -242,8 +256,6 @@ def _segment_type_and_slice(speed_array, speed_frequency,
     segment = slice(start, stop)
 
     supf_start_secs, supf_stop_secs, array_start_secs, array_stop_secs = segment_boundaries(segment, boundary)
-
-    start_padding = segment.start - supf_start_secs
 
     return segment_type, segment, array_start_secs
 
@@ -368,23 +380,21 @@ def _split_on_eng_params(slice_start_secs, slice_stop_secs, split_params_min,
     '''
     slice_start = slice_start_secs * split_params_frequency
     slice_stop = slice_stop_secs * split_params_frequency
-    split_params_slice = slice(np.round(slice_start, 0), np.round(slice_stop, 0))
+    split_params_slice = slice(int(np.round(slice_start, 0)), int(np.round(slice_stop, 0)))
     split_index, split_value = min_value(split_params_min,
                                          _slice=split_params_slice)
 
     if split_index is None:
         return split_index, split_value
 
-    eng_min_slices = runs_of_ones(
-        split_params_min[split_params_slice] == split_value
-    )
+    eng_min_slices = runs_of_ones(split_params_min[split_params_slice] == split_value)
 
     if not eng_min_slices:
-        return round(split_index / split_params_frequency), split_value
+        return py2round(split_index / split_params_frequency), split_value
 
     split_index = eng_min_slices[0].start + \
-        ((eng_min_slices[0].stop - eng_min_slices[0].start) / 2) + slice_start
-    return round(split_index / split_params_frequency), split_value
+        ((eng_min_slices[0].stop - eng_min_slices[0].start) // 2) + slice_start
+    return py2round(split_index / split_params_frequency), split_value
 
 
 def _split_on_dfc(slice_start_secs, slice_stop_secs, dfc_frequency,
@@ -409,8 +419,8 @@ def _split_on_dfc(slice_start_secs, slice_stop_secs, dfc_frequency,
     :rtype: int or float or None
     '''
     dfc_slice = slice(slice_start_secs * dfc_frequency,
-                      floor(slice_stop_secs * dfc_frequency) + 1)
-    unmasked_edges = np.ma.flatnotmasked_edges(dfc_diff[dfc_slice])
+                      int(floor(slice_stop_secs * dfc_frequency)) + 1)
+    unmasked_edges = np.ma.flatnotmasked_edges(dfc_diff[slices_int(dfc_slice)])
     if unmasked_edges is None:
         return None
     unmasked_edges = unmasked_edges.astype(float)
@@ -422,7 +432,7 @@ def _split_on_dfc(slice_start_secs, slice_stop_secs, dfc_frequency,
     else:
         # Split on the first DFC jump.
         dfc_jump = unmasked_edges[0]
-    dfc_index = round(dfc_jump + slice_start_secs + dfc_half_period)
+    dfc_index = py2round(dfc_jump + slice_start_secs + dfc_half_period)
     # account for rounding of dfc index exceeding slow slice
     if dfc_index > slice_stop_secs:
         split_index = slice_stop_secs
@@ -449,8 +459,8 @@ def _split_on_rot(slice_start_secs, slice_stop_secs, heading_frequency,
     '''
     rot_slice = slice(slice_start_secs * heading_frequency,
                       slice_stop_secs * heading_frequency)
-    midpoint = (rot_slice.stop - rot_slice.start) / 2
-    stopped_slices = np.ma.clump_unmasked(rate_of_turn[rot_slice])
+    midpoint = (rot_slice.stop - rot_slice.start) // 2
+    stopped_slices = np.ma.clump_unmasked(rate_of_turn[slices_int(rot_slice)])
     if not stopped_slices:
         return
 
@@ -459,9 +469,9 @@ def _split_on_rot(slice_start_secs, slice_stop_secs, heading_frequency,
     # Split half-way within the stop slice.
     stop_duration = middle_stop.stop - middle_stop.start
     rot_split_index = \
-        rot_slice.start + middle_stop.start + (stop_duration / 2)
+        rot_slice.start + middle_stop.start + (stop_duration // 2)
     # Get the absolute split index at 1Hz.
-    split_index = round(rot_split_index / heading_frequency)
+    split_index = py2round(rot_split_index / heading_frequency)
     return split_index
 
 
@@ -557,12 +567,12 @@ def split_segments(hdf, aircraft_info):
 
     # suppress transient changes in speed around 80 kts
     slow_slices = slices_remove_small_slices(np.ma.clump_masked(slow_array), 10, speed.frequency)
-    
+
     # Skip dropouts in HDF5 files (first identified on H175 helicopter)
     frame_count = hdf.get('FDRS Frame Counter')
     if frame_count:
         drops = np.ma.clump_masked(np.ma.where(frame_count.array == 0.0, np.ma.masked, 1.0)) # 1.0 is any value that's not masked
-        dropouts = slices_multiply(slices_remove_small_gaps(drops, hz=frame_count.frequency), 
+        dropouts = slices_multiply(slices_remove_small_gaps(drops, hz=frame_count.frequency),
                                    speed.frequency / frame_count.frequency)
         slow_slices = slices_and_not(slow_slices, dropouts)
 
@@ -776,7 +786,7 @@ def _mask_invalid_years(array, latest_year):
     return array
 
 
-def get_dt_arrays(hdf, fallback_dt, validation_dt):
+def get_dt_arrays(hdf, fallback_dt, validation_dt, valid_slices=[]):
     now = datetime.utcnow().replace(tzinfo=pytz.utc)
 
     if fallback_dt:
@@ -807,7 +817,7 @@ def get_dt_arrays(hdf, fallback_dt, validation_dt):
                 dt_arrays.append(array)
                 dt_parameter_origin[name]=PRECISE # parameter is good
                 continue
-            
+
         if fallback_dt:
             precise = False
             array = [getattr(dt, name.lower()) for dt in fallback_dts]
@@ -818,7 +828,10 @@ def get_dt_arrays(hdf, fallback_dt, validation_dt):
             continue
         else:
             raise TimebaseError("Required parameter '%s' not available" % name)
-    return dt_arrays, precise, dt_parameter_origin
+
+    validated_dt_arrays = [mask_outside_slices(np.ma.array(a), valid_slices) for a in dt_arrays] if valid_slices else dt_arrays
+
+    return validated_dt_arrays, precise, dt_parameter_origin
 
 
 def has_constant_time(hdf):
@@ -868,13 +881,33 @@ def calculate_fallback_dt(hdf, fallback_dt=None, validation_dt=None,
     try:
         dt_arrays, _, dt_parameter_origin = get_dt_arrays(hdf, fallback_dt, validation_dt)
         timebase = calculate_timebase(*dt_arrays)
-        fallback_changes = [v for v in dt_parameter_origin.itervalues() if 'fallback' in v]
+        fallback_changes = [v for v in dt_parameter_origin.values() if 'fallback' in v]
     except (KeyError, ValueError):
         # The time parameters are not available/operational
         return fallback_dt
     else:
+        now = datetime.utcnow().replace(tzinfo=pytz.utc)
+        assert timebase <= now, (
+            "Fallback time '%s' in the future is not allowed. Current time "
+            "is '%s'." % (fallback_dt, now))
+        if validation_dt is not None:
+            assert timebase <= validation_dt, (
+                "Fallback time '%s' ahead of validation time is not allowed. "
+                "Validation time is '%s'." % (timebase, validation_dt))
         logger.warning("Time doesn't change, using the starting time as the fallback_dt")
         return timebase
+
+
+def get_valid_dt_slices(hdf, min_threshold_count=360):
+    aspd = hdf.get('Airspeed')
+
+    if not aspd:
+        return []
+
+    aspd = align(aspd, P(hz=1))
+    aspd_gt_threshold = np.ma.where(aspd > settings.AIRSPEED_THRESHOLD)[0].size
+
+    return np.ma.clump_unmasked(aspd) if aspd_gt_threshold > min_threshold_count else []
 
 
 def _calculate_start_datetime(hdf, fallback_dt, validation_dt):
@@ -900,26 +933,19 @@ def _calculate_start_datetime(hdf, fallback_dt, validation_dt):
     """
     now = datetime.utcnow().replace(tzinfo=pytz.utc)
     if fallback_dt is not None:
-        if (fallback_dt.tzinfo is None or
-                fallback_dt.tzinfo.utcoffset(fallback_dt) is None):
+        if (fallback_dt.tzinfo is None or fallback_dt.tzinfo.utcoffset(fallback_dt) is None):
             # Assume fallback_dt is UTC
             fallback_dt = fallback_dt.replace(tzinfo=pytz.utc)
-        
+
         # Even if fallback_dt is UTC, there's a chance that the timezone was
         # wrong, so if we're still in the future, let's see if it's less than
         # 12 hours, and if it is, try to fix it
-        if fallback_dt >= now and (fallback_dt - now).seconds/3600 < 12:
+        if fallback_dt >= now and (fallback_dt - now).seconds / 3600 < 12:
             fallback_dt -= fallback_dt - now
-        
-        assert fallback_dt <= now, (
-            "Fallback time '%s' in the future is not allowed. Current time "
-            "is '%s'." % (fallback_dt, now))
-        if validation_dt is not None:
-            assert fallback_dt <= validation_dt, (
-                "Fallback time '%s' ahead of validation time is not allowed. "
-                "Validation time is '%s'." % (fallback_dt, validation_dt))
+
     # align required parameters to 1Hz
-    dt_arrays, precise_timestamp, timestamp_configuration = get_dt_arrays(hdf, fallback_dt, validation_dt)
+    dt_arrays, precise_timestamp, timestamp_configuration = get_dt_arrays(hdf, fallback_dt, validation_dt,
+                                                                          valid_slices=get_valid_dt_slices(hdf))
 
     length = max([len(a) for a in dt_arrays])
     if length > 1:
@@ -1113,7 +1139,13 @@ def split_hdf_to_segments(hdf_path, aircraft_info, fallback_dt=None,
 
         # ARINC 717 data has frames or superframes. ARINC 767 will be split
         # on a minimum boundary of 4 seconds for the analyser.
-        boundary = 64 if hdf.superframe_present else 4
+        if hdf.arinc == '717':
+            boundary = 64 if hdf.superframe_present else 4
+        elif hdf.arinc == '767':
+            boundary = max(int(1 / min(hdf.frequencies)), 4)
+        else:
+            # For CSV and similar single frequency formats, there is no boundary constraint.
+            boundary = 4
 
         segment_tuples = split_segments(hdf, aircraft_info)
         frame_doubled = aircraft_info.get('Frame Doubled', False)

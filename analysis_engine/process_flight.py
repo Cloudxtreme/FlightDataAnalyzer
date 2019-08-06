@@ -2,9 +2,9 @@ from __future__ import print_function
 
 import argparse
 import itertools
-import json
 import logging
 import os
+import simplejson as json
 import six
 import sys
 
@@ -44,25 +44,25 @@ def geo_locate(hdf, items):
         logger.warning("Could not geo-locate as either 'Latitude Smoothed' or "
                        "'Longitude Smoothed' were not found within the hdf.")
         return items
-    
+
     lat_hdf = hdf['Latitude Smoothed']
     lon_hdf = hdf['Longitude Smoothed']
-    
+
     if (not lat_hdf.array.count()) or (not lon_hdf.array.count()):
         logger.warning("Could not geo-locate as either 'Latitude Smoothed' or "
                        "'Longitude Smoothed' have no unmasked values.")
         return items
-    
+
     lat_pos = derived_param_from_hdf(lat_hdf)
     lon_pos = derived_param_from_hdf(lon_hdf)
-    
+
     # We want to place start of flight and end of flight markers at the ends
     # of the data which may extend more than REPAIR_DURATION seconds beyond
     # the end of the valid data. Hence by setting this to None and
     # extrapolate=True we achieve this goal.
     lat_pos.array = repair_mask(lat_pos.array, repair_duration=None, extrapolate=True)
     lon_pos.array = repair_mask(lon_pos.array, repair_duration=None, extrapolate=True)
-    
+
     for item in itertools.chain.from_iterable(six.itervalues(items)):
         item.latitude = lat_pos.at(item.index) or None
         item.longitude = lon_pos.at(item.index) or None
@@ -94,6 +94,12 @@ def get_node_type(node, node_subclasses):
     return node.__class__.__name__
 
 
+def serialise_datetime(value):
+    if isinstance(value, datetime):
+        return value.isoformat()
+    raise TypeError("Cannot serialise type: %s" % type(value))
+
+
 def derive_parameters(hdf, node_mgr, process_order, params=None, force=False):
     '''
     Derives parameters in process_order. Dependencies are sourced via the
@@ -112,7 +118,7 @@ def derive_parameters(hdf, node_mgr, process_order, params=None, force=False):
         params = {}
     # OPT: local lookup is faster than module-level (small).
     node_subclasses = NODE_SUBCLASSES
-    
+
     # store all derived params that aren't masked arrays
     approaches = {}
     # duplicate storage, but maintaining types
@@ -128,7 +134,7 @@ def derive_parameters(hdf, node_mgr, process_order, params=None, force=False):
     for param_name in process_order:
         if param_name in node_mgr.hdf_keys:
             continue
-        
+
         elif param_name in params:
             node = params[param_name]
             # populate output already at 1Hz
@@ -187,20 +193,20 @@ def derive_parameters(hdf, node_mgr, process_order, params=None, force=False):
         node._n = node_mgr
         logger.debug("Processing %s `%s`", get_node_type(node, node_subclasses), param_name)
         # Derive the resulting value
-        
+
         try:
             node = node.get_derived(deps)
         except:
             if not force:
                 raise
-        
+
         del node._p
         del node._h
         del node._n
 
         if node.node_type is KeyPointValueNode:
             params[param_name] = node
-            
+
             aligned_kpvs = []
             for one_hz in node.get_aligned(P(frequency=1, offset=0)):
                 if not (0 <= one_hz.index <= duration+4):
@@ -211,7 +217,7 @@ def derive_parameters(hdf, node_mgr, process_order, params=None, force=False):
             kpvs[param_name] = aligned_kpvs
         elif node.node_type is KeyTimeInstanceNode:
             params[param_name] = node
-            
+
             aligned_ktis = []
             for one_hz in node.get_aligned(P(frequency=1, offset=0)):
                 if not (0 <= one_hz.index <= duration+4):
@@ -358,7 +364,8 @@ def parse_analyser_profiles(analyser_profiles, filter_modules=None):
 def process_flight(segment_info, tail_number, aircraft_info={}, achieved_flight_record={},
                    requested=[], required=[], include_flight_attributes=True,
                    additional_modules=[], pre_flight_kwargs={}, force=False,
-                   initial={}, reprocess=False, requested_only=False):
+                   initial={}, reprocess=False, requested_only=False,
+                   dependency_tree_log=None):
     '''
     Processes the HDF file (segment_info['File']) to derive the required_params (Nodes)
     within python modules (settings.NODE_MODULES).
@@ -534,7 +541,7 @@ def process_flight(segment_info, tail_number, aircraft_info={}, achieved_flight_
         'kti':[GeoKeyTimeInstance('index name latitude longitude')]
             if lat/long available
             else [KeyTimeInstance('index name')],
-        'kpv':[KeyPointValue('index value name slice')]
+        'kpv':[KeyPointValue('index value name')]
     }
 
     sample flight Attributes:
@@ -546,7 +553,6 @@ def process_flight(segment_info, tail_number, aircraft_info={}, achieved_flight_
     ],
 
     '''
-    
     hdf_path = segment_info['File']
     if 'Start Datetime' not in segment_info:
         import pytz
@@ -627,7 +633,8 @@ def process_flight(segment_info, tail_number, aircraft_info={}, achieved_flight_
         param_names = hdf.valid_lfl_param_names() if reprocess else \
             hdf.valid_param_names()
         pre_process_parameters(hdf, segment_info, param_names, required,
-                               aircraft_info, achieved_flight_record, force=force)
+                               aircraft_info, achieved_flight_record, force=force,
+                               dependency_tree_log=dependency_tree_log)
 
         if requested_only:
             param_names = list(set(param_names) - set(requested_subset))
@@ -642,7 +649,7 @@ def process_flight(segment_info, tail_number, aircraft_info={}, achieved_flight_
             process_order = [r for r in requested if r in requested_subset]
         else:
             # calculate dependency tree
-            process_order, gr_st = dependency_order(node_mgr, draw=False)
+            process_order, gr_st = dependency_order(node_mgr, draw=False, dependency_tree_log=dependency_tree_log)
             if settings.CACHE_PARAMETER_MIN_USAGE:
                 # find params used more than CACHE_PARAMETER_MIN_USAGE
                 for node in gr_st.nodes():
@@ -674,8 +681,9 @@ def process_flight(segment_info, tail_number, aircraft_info={}, achieved_flight_
             hdf.dependency_tree = json.dumps(json_graph.node_link_data(gr_st))
 
             # Store aircraft info
-            hdf.set_attr('aircraft_info', aircraft_info)
-            hdf.set_attr('achieved_flight_record', achieved_flight_record)
+            hdf.set_attr('aircraft_info', json.dumps(aircraft_info))
+            hdf.set_attr('achieved_flight_record', json.dumps(achieved_flight_record,
+                                                              default=serialise_datetime))
 
     return {
         'flight': flight_attrs,
@@ -686,7 +694,8 @@ def process_flight(segment_info, tail_number, aircraft_info={}, achieved_flight_
     }
 
 def pre_process_parameters(hdf, segment_info, param_names, required,
-                     aircraft_info, achieved_flight_record, force=False):
+                     aircraft_info, achieved_flight_record, force=False,
+                     dependency_tree_log=None):
     '''
     Perform actions prior to main processing run.
 
@@ -701,7 +710,7 @@ def pre_process_parameters(hdf, segment_info, param_names, required,
         segment_info, hdf.duration, param_names,
         requested, required, pre_processing_nodes, aircraft_info,
         achieved_flight_record)
-    process_order, gr_st = dependency_order(node_mgr, draw=False)
+    process_order, gr_st = dependency_order(node_mgr, draw=False, dependency_tree_log=dependency_tree_log)
 
     ktis, kpvs, sections, approaches, flight_attrs = \
         derive_parameters(hdf, node_mgr, process_order, force=force)
@@ -784,10 +793,11 @@ def main():
                         help='Engine series.')
     parser.add_argument('-engine-type', dest='engine_type', type=str,
                         help='Engine type.')
-    
+
     parser.add_argument('-initial', dest='initial', type=str,
                         help='Path to initial nodes in json format.')
-    
+    parser.add_argument('--dependency-log', dest='dependency_tree_log', type=str,
+                        help='Dependency tree log filename.')
 
     args = parser.parse_args()
 
@@ -834,13 +844,16 @@ def main():
         aircraft_info['Engine Series'] = args.engine_series
     if args.engine_type:
         aircraft_info['Engine Type'] = args.engine_type
+    dependency_tree_log = None
+    if args.dependency_tree_log:
+        dependency_tree_log = args.dependency_tree_log
 
     # Derive parameters to new HDF
     hdf_copy = copy_file(args.file, postfix='_process')
     if args.strip:
         with hdf_file(hdf_copy) as hdf:
             hdf.delete_params(hdf.derived_keys())
-    
+
     if args.initial:
         if not os.path.exists(args.initial):
             parser.error('Path for initial json data not found: %s' % args.initial)
@@ -856,11 +869,12 @@ def main():
         segment_info, args.tail_number, aircraft_info=aircraft_info,
         requested=args.requested, required=args.required, initial=initial,
         include_flight_attributes=False,
+        dependency_tree_log=dependency_tree_log,
     )
     # Flatten results.
     res = {k: list(itertools.chain.from_iterable(six.itervalues(v)))
            for k, v in six.iteritems(res)}
-    
+
     logger.info("Derived parameters stored in hdf: %s", hdf_copy)
     # Write CSV file
     if not args.disable_csv:

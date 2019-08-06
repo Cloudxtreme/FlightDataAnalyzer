@@ -8,7 +8,9 @@ from flightdatautilities.array_operations import load_compressed
 from hdfaccess.parameter import MappedArray
 
 from analysis_engine.node import (
-    A, ApproachItem, aeroplane, helicopter, KeyTimeInstance, KTI, load, Parameter, P, Section, S, M,)
+    A, M, P, S, KTI, aeroplane, ApproachItem, helicopter,
+    KeyTimeInstance, load, Parameter, Section
+)
 
 from analysis_engine.key_time_instances import (
     AltitudePeak,
@@ -79,11 +81,10 @@ from analysis_engine.key_time_instances import (
     TopOfDescent,
     TouchAndGo,
     Touchdown,
-    Transmit,
+    Transmit
 )
 
-from derived_parameters_test import NodeTest
-from flight_phase_test import buildsection, buildsections
+from analysis_engine.test_utils import buildsection, buildsections
 
 debug = sys.gettrace() is not None
 
@@ -106,7 +107,7 @@ class NodeTest(object):
                 self.operational_combination_length,
             )
         else:
-            combinations = map(set, self.node_class.get_operational_combinations(**kwargs))
+            combinations = list(map(set, self.node_class.get_operational_combinations(**kwargs)))
             for combination in map(set, self.operational_combinations):
                 self.assertIn(combination, combinations)
 
@@ -214,7 +215,6 @@ class TestClimbStart(unittest.TestCase):
         kti = ClimbStart()
         kti.derive(alt_aal, liftoffs, tocs)
         # These values give an result with an index of 4.5454 recurring.
-        expected = [KeyTimeInstance(index=5/1.1, name='Climb Start')]
         self.assertEqual(len(kti), 1)
         self.assertAlmostEqual(kti[0].index, 4.5, 1)
 
@@ -258,45 +258,58 @@ class TestClimbAccelerationStart(unittest.TestCase):
         self.node_class = ClimbAccelerationStart
 
     def test_can_operate(self):
-        opts = self.node_class.get_operational_combinations()
         self.assertTrue(self.node_class.can_operate(('Airspeed Selected',
-                                                     'Initial Climb')))
+                                                     'Initial Climb',
+                                                     'Altitude When Climbing')))
+        self.assertTrue(self.node_class.can_operate(('Airspeed',
+                                                     'Flap Lever Set',
+                                                     'Initial Climb',
+                                                     'Altitude When Climbing')))
         self.assertTrue(self.node_class.can_operate(('Altitude AAL For Flight Phases',
                                                      'Engine Propulsion',
-                                                     'Initial Climb')))
+                                                     'Initial Climb',
+                                                     'Altitude When Climbing')))
         jet = A('Engine Propulsion', 'JET')
         self.assertTrue(self.node_class.can_operate(('Throttle Levers',
-                                                     'Initial Climb'),
+                                                     'Initial Climb',
+                                                     'Altitude When Climbing'),
                                                     eng_type=jet))
         prop = A('Engine Propulsion', 'PROP')
         self.assertTrue(self.node_class.can_operate(('Eng (*) Np Max',
-                                                     'Initial Climb'),
+                                                     'Initial Climb',
+                                                     'Altitude When Climbing'),
                                                     eng_type=prop))
 
     def test_derive_basic(self):
         array = np.ma.concatenate((np.ones(15) * 110, np.ones(20) * 180))
         spd_sel = Parameter('Airspeed Selected', array=array)
-        init_climbs = buildsection('Initial Climb', 5, 29)
+        init_climbs = buildsection('Initial Climb', 5, 19)
+        alt_climbing = AltitudeWhenClimbing(
+            items=[KeyTimeInstance(29, name='4000 Ft Climbing')]
+        )
         node = self.node_class()
-        node.derive(None, init_climbs, spd_sel, None, None, None)
+        node.derive(None, init_climbs, alt_climbing, spd_sel, None, None, None, None, None, None)
         self.assertEqual(len(node), 1)
         self.assertAlmostEqual(node[0].index, 13.1, places=1)
 
     def test_derive_spd_analog(self):
         spd_sel = load(os.path.join(test_data_path, 'climb_acceleration_start_spd_sel_analog.nod'))
-        init_climbs = buildsection('Initial Climb', 714, 761)
+        init_climbs = buildsection('Initial Climb', 714, 741)
+        alt_climbing = AltitudeWhenClimbing(
+            items=[KeyTimeInstance(761, name='4000 Ft Climbing')]
+        )
         node = self.node_class()
-        node.derive(None, init_climbs, spd_sel, None, None, None)
+        node.derive(None, init_climbs, alt_climbing, spd_sel, None, None, None, None, None, None)
         self.assertEqual(len(node), 1)
-        self.assertAlmostEqual(node[0].index, 1459, places=0)
-
+        self.assertAlmostEqual(node[0].index, 1461, places=0)
 
     def test_derive_spd_unchanged(self):
         array = np.ma.array([155]*35)
         spd_sel = Parameter('Airspeed Selected', array=array)
         init_climbs = buildsection('Initial Climb', 5, 29)
+        alt_climbing = AltitudeWhenClimbing()
         node = self.node_class()
-        node.derive(None, init_climbs, spd_sel, None, None, None)
+        node.derive(None, init_climbs, alt_climbing, spd_sel, None, None, None, None, None, None)
         self.assertEqual(len(node), 0)
 
     def test_derive_spd_masked(self):
@@ -304,32 +317,68 @@ class TestClimbAccelerationStart(unittest.TestCase):
         array[5:30] = np.ma.masked
         spd_sel = Parameter('Airspeed Selected', array=array)
         init_climbs = buildsection('Initial Climb', 5, 29)
+        alt_climbing = AltitudeWhenClimbing()
         node = self.node_class()
-        node.derive(None, init_climbs, spd_sel, None, None, None)
+        node.derive(None, init_climbs, alt_climbing, spd_sel, None, None, None, None, None, None)
         self.assertEqual(len(node), 0)
+
+    def test_derive_spd_sel_fmc_first(self):
+        array = np.ma.concatenate((np.ones(15) * 110, np.ones(20) * 180))
+        array[5:30] = np.ma.masked
+        spd_sel = Parameter('Airspeed Selected', array=array)
+        array = np.ma.concatenate((np.ones(15) * 130, np.ones(20) * 180))
+        array[20:30] = np.ma.masked
+        spd_sel_fmc = Parameter('Airspeed Selected (FMC)', array=array)
+        init_climbs = buildsection('Initial Climb', 5, 19)
+        alt_climbing = AltitudeWhenClimbing(
+            items=[KeyTimeInstance(29, name='4000 Ft Climbing')]
+        )
+        node = self.node_class()
+        node.derive(None, init_climbs, alt_climbing, spd_sel, spd_sel_fmc, None, None, None, None, None)
+        self.assertEqual(len(node), 1)
+        self.assertAlmostEqual(node[0].index, 13.2, places=1)
 
     def test_derive_engine_propulsion(self):
         jet = A('Engine Propulsion', value='JET')
         alt_aal = P('Altitude AAL For Flight Phases', array=np.ma.arange(1000))
         init_climbs = buildsection('Initial Climb', 35, 1000)
+        alt_climbing = AltitudeWhenClimbing()
+        masked_array = np.ma.array(data=np.zeros(1000), mask=True)
+        throttle = P('Throttle Levers', array=masked_array)
         node = self.node_class()
-        node.derive(alt_aal, init_climbs, None, jet, None, None)
+        node.derive(alt_aal, init_climbs, alt_climbing, None, None, jet, None, throttle, None, None)
         self.assertEqual(len(node), 1)
         self.assertEqual(node[0].index, 800)
         prop = A('Engine Propulsion', value='PROP')
+        eng_np = P('Eng (*) Np Max', array=masked_array)
         node = self.node_class()
-        node.derive(alt_aal, init_climbs, None, prop, None, None)
+        node.derive(alt_aal, init_climbs, alt_climbing, None, None, prop, eng_np, None, None, None)
         self.assertEqual(len(node), 1)
         self.assertEqual(node[0].index, 400)
+
+    def test_derive_spd(self):
+        array = np.ma.concatenate((np.ones(30) * 110, np.arange(111, 181)))
+        spd = Parameter('Airspeed', array=array)
+        flap = KTI('Flap Lever Set', items=[KeyTimeInstance(80, name='Flap 0 Set')])
+        init_climbs = buildsection('Initial Climb', 5, 40)
+        alt_climbing = AltitudeWhenClimbing(
+            items=[KeyTimeInstance(99, name='4000 Ft Climbing')]
+        )
+        node = self.node_class()
+        node.derive(None, init_climbs, alt_climbing, None, None, None, None, None, spd, flap)
+        self.assertEqual(len(node), 1)
+        # With moving average over 7 samples, half window is 3 samples to the left
+        self.assertEqual(node[0].index, 30-3)
 
     def test_derive_eng_np(self):
         initial_climbs = buildsection('Initial Climb', 887, 926)
         initial_climbs.frequency = 0.5
+        alt_climbing = AltitudeWhenClimbing()
         prop = A('Engine Propulsion', value='PROP')
         eng_np = load(os.path.join(
             test_data_path, 'climb_acceleration_start_eng_np.nod'))
         node = self.node_class()
-        node.derive(None, initial_climbs, None, prop, eng_np, None)
+        node.derive(None, initial_climbs, alt_climbing, None, None, prop, eng_np, None, None, None)
         self.assertEqual(len(node), 1)
         self.assertAlmostEqual(node[0].index, 917, places=0)
 
@@ -339,25 +388,28 @@ class TestClimbAccelerationStart(unittest.TestCase):
         '''
         initial_climbs = buildsection('Initial Climb', 419, 439)
         initial_climbs.frequency = 1
+        alt_climbing = AltitudeWhenClimbing()
         prop = A('Engine Propulsion', value='PROP')
         alt_aal = load(os.path.join(
             test_data_path, 'climb_acceleration_start_alt_aal_noise.nod'))
         eng_np = load(os.path.join(
             test_data_path, 'climb_acceleration_start_eng_np_noise.nod'))
+        # Make masked speed and flap array to default to Eng Np
         node = self.node_class()
-        node.derive(alt_aal, initial_climbs, None, prop, eng_np, None)
+        node.derive(alt_aal, initial_climbs, alt_climbing, None, None, prop, eng_np, None, None, None)
         self.assertEqual(len(node), 1)
         self.assertAlmostEqual(node[0].index, 854, places=0)
 
     def test_derive_throttle_levers_fallback(self):
         initial_climbs = buildsection('Initial Climb', 511, 531)
+        alt_climbing = AltitudeWhenClimbing()
         jet = A('Engine Propulsion', value='JET')
         alt_aal = load(os.path.join(
             test_data_path, 'climb_acceleration_start_alt_aal_fallback.nod'))
         throttle_levers = load(os.path.join(
             test_data_path, 'climb_acceleration_start_throttle_levers_fallback.nod'))
         node = self.node_class()
-        node.derive(alt_aal, initial_climbs, None, jet, None, throttle_levers)
+        node.derive(alt_aal, initial_climbs,alt_climbing, None, None, jet, None, throttle_levers, None, None)
         self.assertEqual(len(node), 1)
         # Falls back to 800 Ft
         self.assertAlmostEqual(node[0].index, 527, places=0)
@@ -562,7 +614,10 @@ class TestAltitudeWhenDescending(unittest.TestCase):
         self.assertEqual(
             list(altitude_when_descending),
             [KeyTimeInstance(index=2.5, name='75 Ft Descending'),
-             KeyTimeInstance(index=5.0, name='50 Ft Descending')])
+             KeyTimeInstance(index=5.0, name='50 Ft Descending'),
+             KeyTimeInstance(index=6.5, name='35 Ft Descending'),
+             KeyTimeInstance(index=8.0, name='20 Ft Descending'),
+             KeyTimeInstance(index=9.0, name='10 Ft Descending')])
 
 
 class TestAltitudeBeforeLevelFlightWhenClimbing(unittest.TestCase):
@@ -856,7 +911,7 @@ class TestTopOfClimb(unittest.TestCase):
         self.assertEqual(phase, expected)
 
     def test_top_of_climb_truncated_start(self):
-        alt_data = np.ma.array([800]*5+range(800,0,-100))
+        alt_data = np.ma.array([800]*5+list(range(800,0,-100)))
         alt = Parameter('Altitude STD Smoothed', np.ma.array(alt_data))
         phase = TopOfClimb()
         in_air = buildsection('Climb Cruise Descent',0,len(alt.array))
@@ -894,7 +949,7 @@ class TestTopOfDescent(unittest.TestCase):
         self.assertEqual(phase, expected)
 
     def test_top_of_descent_truncated_start(self):
-        alt_data = np.ma.array([800]*5+range(800,0,-100))
+        alt_data = np.ma.array([800]*5+list(range(800,0,-100)))
         alt = Parameter('Altitude STD Smoothed', np.ma.array(alt_data))
         phase = TopOfDescent()
         in_air = buildsection('Climb Cruise Descent',0,len(alt.array))
@@ -944,8 +999,6 @@ class TestTouchdown(unittest.TestCase):
                                     'TestTouchdown-gog.nod'))
         #FIXME: MappedArray should take values_mapping and apply it itself
         gog.array.values_mapping = gog.values_mapping
-        roc = load(os.path.join(test_data_path,
-                                    'TestTouchdown-roc.nod'))
         lands = buildsection('Landing', 23279, 23361)
         tdwn = Touchdown()
         tdwn.derive(None, None, alt, alt, gog, lands)
@@ -1352,7 +1405,6 @@ class TestLastEngStopAfterTouchdown(unittest.TestCase):
                                    KeyTimeInstance(170, name='Eng (1) Stop'),
                                    KeyTimeInstance(180, name='Eng (2) Stop'),])
         touchdowns = KTI('Touchdown', items=[KeyTimeInstance(100, 'Touchdown')])
-        duration = A('HDF Duration', 200)
         node = LastEngStopAfterTouchdown()
         node.derive(eng_stops, eng_count, touchdowns)
         self.assertEqual(len(node), 1)
@@ -1691,7 +1743,7 @@ class TestFirstFlapExtensionWhileAirborne(unittest.TestCase, NodeTest):
         ]))
 
     def test_corrupt_flap_signal(self):
-        
+
         array = np.ma.array(data=[0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 5, 0, 0],
                             mask=[0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0])
         mapping = {int(f): str(f) for f in np.ma.unique(array.data)}
@@ -1702,7 +1754,7 @@ class TestFirstFlapExtensionWhileAirborne(unittest.TestCase, NodeTest):
         node.derive(self.flap_lever, None, airborne)
         self.assertEqual(node, KTI(name=name, items=[
             KeyTimeInstance(index=8.5, name=name),
-        ]))        
+        ]))
 
 
 class TestFlapRetractionWhileAirborne(unittest.TestCase, NodeTest):

@@ -18,9 +18,9 @@ other parameters.
         '''
         Docstring
         '''
-    
+
         units = 'unit'
-    
+
         def derive(self, param1=P('Parameter One'), ...):
             ...
 
@@ -28,7 +28,7 @@ other parameters.
     We use a wrapper (**P()** here) to assist the programmer with IDE
     auto-completion of the **first** keyword argument, providing it with the
     attributes available on the expected data type being used.
-    
+
     The name of the dependency is provided as a String.
 
 Units is the unit which gives the values stored in the parameter meaning.
@@ -50,11 +50,11 @@ For example to force all dependancies to a frequency of one Hz with a zero offse
         '''
         Docstring
         '''
-    
+
         align_frequency = 1
         align_offset = 0
         units = 'unit'
-    
+
         def derive(self, param1=P('Parameter One'), ...):
             ...
 
@@ -74,10 +74,10 @@ frequency of one htz with a zero offset.
         '''
         Docstring
         '''
-    
+
         align = false
         units = 'unit'
-    
+
         def derive(self, param1=P('Parameter One'), ...):
             self.frequency = 1
             self.offset = 0
@@ -150,7 +150,7 @@ a derive method. (using a M() wrapper here)
 
     import numpy as np
     from analysis_engine.node import M
-    
+
     spd_brk = M(name='Speedbrake Selected',
                 array=np.ma.array([0, 1, 2, 0, 0] * 3),
                 values_mapping={
@@ -165,7 +165,7 @@ We can look up both states and the values used by index.
 
     >>> spd_brk.array[2]
     'Deployed/Cmd Up'
-    
+
     >>> spd_brk.array.data[2]
     2
 
@@ -184,7 +184,7 @@ and of course look up the raw value used for a state.
 
     >>> spd_brk.state
     {'Deployed/Cmd Up': 2, 'Stowed': 0, 'Armed/Cmd Dn': 1}
-    
+
     >>> spd_brk.state['Armed/Cmd Dn']
     1
 
@@ -237,7 +237,7 @@ some dependancies. As we have already identified we will use the 'Heading
 True Continuous' and the 'Drift' parameters. As we require both 'Heading True
 Continuous' and the 'Drift' parameters we do not require a can_operate
 method. Heading is primary parameter we are interested in so we will use this
-as the first dependancy which other dependancies will be aligned to.
+as the first dependency which other dependancies will be aligned to.
 
 .. code-block:: python
 
@@ -271,7 +271,7 @@ The completed node will look as follows.
         Range 0 to 360
         '''
         units = 'deg'
-    
+
         def derive(self, heading=P('Heading True Continuous'), drift=P('Drift')):
             #Note: drift is to the right of heading, so: Track = Heading + Drift
             self.array = (heading.array + drift.array) % 360
@@ -289,13 +289,13 @@ Below are some helpful ways to implement the can operate methods.
 
 :py:func:`analysis_engine.library.all_of`
     Returns True if all of the names are within the available list.
-    
+
     for example if we need Altitude AAL and either Flap (L) or Flap (R)
 
     .. code-block:: python
 
         from analysis_engine.library import all_of
-        
+
         @classmethod
         def can_operate(cls, available):
             return all_of(('Altitude AAL', 'Flap (L)'), available) or \
@@ -303,13 +303,13 @@ Below are some helpful ways to implement the can operate methods.
 
 :py:func:`analysis_engine.library.any_of`
     Returns True if any of the names are within the available list.
-    
+
     using the same example as above we could use
 
     .. code-block:: python
 
         from analysis_engine.library import any_of
-        
+
         @classmethod
         def can_operate(cls, available):
             return 'Altitude AAL' in available and \
@@ -321,12 +321,12 @@ same results.
 .. code-block:: python
 
     from analysis_engine.library import all_of
-    
+
     @classmethod
     def can_operate(cls, available):
         base_for_lookup = ['Airspeed', 'Gross Weight At Liftoff', 'Series',
                        'Family']
-    
+
         afr = all_of(('AFR V2', 'Airspeed'), available)
         airbus = all_of(base_for_lookup + ['Configuration'], available)
         boeing = all_of(base_for_lookup + ['Flap'], available)
@@ -350,12 +350,12 @@ Derive
 
         >>> import numpy as np
         >>> from analysis_engine.library import np_ma_masked_zeros_like
-        
+
         >>> an_array = np.ma.arange(10, 33)
         masked_array(data = [10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32],
                      mask = False,
                fill_value = 999999)
-        
+
         >>> np_ma_masked_zeros_like(an_array)
         masked_array(data = [-- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --],
                      mask = [ True  True  True  True  True  True  True  True  True  True  True  True

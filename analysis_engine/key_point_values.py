@@ -7,115 +7,124 @@ import operator
 import re
 import six
 
-from collections import defaultdict
 from copy import deepcopy
 from math import ceil, copysign
 from operator import itemgetter
 
+from hdfaccess.parameter import NO_MAPPING
 from flightdatautilities import aircrafttables as at, units as ut
 from flightdatautilities.geometry import midpoint, great_circle_distance__haversine
 
-from analysis_engine.settings import (ACCEL_LAT_OFFSET_LIMIT,
-                                      ACCEL_LON_OFFSET_LIMIT,
-                                      ACCEL_NORM_OFFSET_LIMIT,
-                                      AIRSPEED_THRESHOLD,
-                                      BUMP_HALF_WIDTH,
-                                      CLIMB_OR_DESCENT_MIN_DURATION,
-                                      CONTROL_FORCE_THRESHOLD,
-                                      GRAVITY_IMPERIAL,
-                                      GRAVITY_METRIC,
-                                      HOVER_MIN_DURATION,
-                                      HYSTERESIS_FPALT,
-                                      MIN_HEADING_CHANGE,
-                                      NAME_VALUES_CONF,
-                                      NAME_VALUES_ENGINE,
-                                      NAME_VALUES_LEVER,
-                                      NAME_VALUES_RANGES,
-                                      HEADING_RATE_FOR_TAXI_TURNS,
-                                      REVERSE_THRUST_EFFECTIVE_EPR,
-                                      REVERSE_THRUST_EFFECTIVE_N1,
-                                      SPOILER_DEPLOYED,
-                                      TCAS_SCAN_TIME,
-                                      TCAS_THRESHOLD,
-                                      VERTICAL_SPEED_FOR_LEVEL_FLIGHT)
-
 from analysis_engine.node import (
-    KeyPointValueNode, KPV, KTI, P, S, A, M, App, Section,
-    aeroplane, aeroplane_only, helicopter, helicopter_only)
+    A, M, P, S, KPV, KTI, aeroplane, aeroplane_only, App,
+    helicopter, KeyPointValueNode, Section
+)
 
-from analysis_engine.library import (ambiguous_runway,
-                                     align,
-                                     all_deps,
-                                     all_of,
-                                     any_of,
-                                     bearings_and_distances,
-                                     bump,
-                                     closest_unmasked_value,
-                                     clump_multistate,
-                                     coreg,
-                                     cycle_counter,
-                                     cycle_finder,
-                                     cycle_select,
-                                     find_edges,
-                                     find_edges_on_state_change,
-                                     first_valid_parameter,
-                                     first_valid_sample,
-                                     hysteresis,
-                                     ils_established,
-                                     index_at_value,
-                                     index_of_first_start,
-                                     index_of_last_stop,
-                                     integrate,
-                                     is_index_within_slice,
-                                     is_index_within_slices,
-                                     lookup_table,
-                                     nearest_neighbour_mask_repair,
-                                     mask_inside_slices,
-                                     mask_outside_slices,
-                                     max_abs_value,
-                                     max_continuous_unmasked,
-                                     max_maintained_value,
-                                     max_value,
-                                     median_value,
-                                     min_value,
-                                     most_common_value,
-                                     moving_average,
-                                     repair_mask,
-                                     np_ma_masked_zeros_like,
-                                     np_ma_zeros_like,
-                                     peak_curvature,
-                                     prev_unmasked_value,
-                                     rate_of_change_array,
-                                     runs_of_ones,
-                                     runway_deviation,
-                                     runway_distance_from_end,
-                                     runway_heading,
-                                     second_window,
-                                     shift_slice,
-                                     shift_slices,
-                                     slice_duration,
-                                     slice_midpoint,
-                                     slice_samples,
-                                     slices_above,
-                                     slices_and_not,
-                                     slices_below,
-                                     slices_between,
-                                     slices_duration,
-                                     slices_from_ktis,
-                                     slices_from_to,
-                                     slices_not,
-                                     slices_overlap,
-                                     slices_or,
-                                     slices_and,
-                                     slices_remove_overlaps,
-                                     slices_remove_small_slices,
-                                     slices_remove_small_gaps,
-                                     trim_slices,
-                                     level_off_index,
-                                     valid_slices_within_array,
-                                     value_at_index,
-                                     vstack_params_where_state,
-                                     vstack_params)
+from analysis_engine.library import (
+    align,
+    all_deps,
+    all_of,
+    alt2press,
+    ambiguous_runway,
+    any_of,
+    bearings_and_distances,
+    bump,
+    closest_unmasked_value,
+    clump_multistate,
+    coreg,
+    cycle_counter,
+    cycle_finder,
+    cycle_select,
+    find_edges,
+    find_edges_on_state_change,
+    first_valid_parameter,
+    first_valid_sample,
+    hysteresis,
+    ils_established,
+    index_at_value,
+    index_of_first_start,
+    index_of_last_stop,
+    integrate,
+    is_index_within_slice,
+    is_index_within_slices,
+    last_valid_sample,
+    level_off_index,
+    lookup_table,
+    mask_inside_slices,
+    mask_outside_slices,
+    max_abs_value,
+    max_continuous_unmasked,
+    max_maintained_value,
+    max_value,
+    median_value,
+    min_value,
+    most_common_value,
+    moving_average,
+    nearest_neighbour_mask_repair,
+    np_ma_masked_zeros_like,
+    np_ma_zeros_like,
+    peak_curvature,
+    prev_unmasked_value,
+    rate_of_change_array,
+    repair_mask,
+    runs_of_ones,
+    runway_deviation,
+    runway_distance_from_end,
+    runway_heading,
+    second_window,
+    shift_slice,
+    shift_slices,
+    slice_duration,
+    slice_midpoint,
+    slice_samples,
+    slices_above,
+    slices_and,
+    slices_and_not,
+    slices_below,
+    slices_between,
+    slices_duration,
+    slices_from_ktis,
+    slices_from_to,
+    slices_not,
+    slices_or,
+    slices_overlap,
+    slices_remove_overlaps,
+    slices_remove_small_gaps,
+    slices_remove_small_slices,
+    trim_slices,
+    valid_slices_within_array,
+    value_at_index,
+    vstack_params,
+    vstack_params_where_state,
+)
+
+from analysis_engine.settings import (
+    ACCEL_LAT_OFFSET_LIMIT,
+    ACCEL_LON_OFFSET_LIMIT,
+    ACCEL_NORM_OFFSET_LIMIT,
+    AIRSPEED_THRESHOLD,
+    BUMP_HALF_WIDTH,
+    CLIMB_OR_DESCENT_MIN_DURATION,
+    CONTROL_FORCE_THRESHOLD,
+    GRAVITY_IMPERIAL,
+    GRAVITY_METRIC,
+    HOVER_MIN_DURATION,
+    HYSTERESIS_FPALT,
+    MIN_HEADING_CHANGE,
+    NAME_VALUES_CONF,
+    NAME_VALUES_ENGINE,
+    NAME_VALUES_LEVER,
+    NAME_VALUES_RANGES,
+    HEADING_RATE_FOR_TAXI_TURNS,
+    REVERSE_THRUST_EFFECTIVE_EPR,
+    REVERSE_THRUST_EFFECTIVE_N1,
+    SPOILER_DEPLOYED,
+    TCAS_SCAN_TIME,
+    TCAS_THRESHOLD,
+    VERTICAL_SPEED_FOR_LEVEL_FLIGHT
+)
+
+from flightdatautilities.numpy_utils import slices_int
 
 
 ##############################################################################
@@ -515,7 +524,7 @@ class AccelerationLongitudinalOffset(KeyPointValueNode):
         duration of the taxi phase.
 
         Note: using mobile sections which are not Fast in place of taxiing in
-        order to aviod circular dependancy with Taxiing, Rejected Takeoff and
+        order to aviod circular dependency with Taxiing, Rejected Takeoff and
         Acceleration Longitudinal Offset Removed
         '''
 
@@ -526,7 +535,7 @@ class AccelerationLongitudinalOffset(KeyPointValueNode):
         the average for this section(s) if there are enough samples.
         '''
         unmasked_data = []
-        for taxi in taxis:
+        for taxi in slices_int(taxis):
             unmasked_data.extend(np.ma.compressed(acc_lon.array[taxi]))
         if len(unmasked_data) > 20:
             delta = np.sum(unmasked_data) / float(len(unmasked_data))
@@ -743,6 +752,29 @@ class AccelerationNormalWithFlapDownWhileAirborneMin(KeyPointValueNode):
         self.create_kpv_from_slices(acc_flap_dn, remove_bump(airborne), min_value)
 
 
+class AccelerationNormalAboveLimitWithFlapDownWhileAirborne(KeyPointValueNode):
+    '''
+    Returns the difference between the Acceleration Normal and the limit for
+    Acceleration Normal with flaps down depending on aircraft flap position
+    and aircraft weight.
+
+    Specific to B737 MAX.
+    '''
+
+    units = ut.G
+
+    def derive(self,
+               acc_norm=P('Acceleration Normal Offset Removed'),
+               acc_limit=P('Acceleration Normal High Limit With Flaps Down'),
+               airborne=S('Airborne')):
+
+        self.create_kpv_from_slices(
+            acc_norm.array - acc_limit.array,
+            remove_bump(airborne),
+            max_value
+        )
+
+
 class AccelerationNormalAtLiftoff(KeyPointValueNode):
     '''
     This is a measure of the normal acceleration at the point of liftoff, and
@@ -781,8 +813,9 @@ class AccelerationNormalAtTouchdown(KeyPointValueNode):
             tdwns += touch_and_go
         for touchdown in tdwns:
             self.create_kpv(*bump(acc_norm, touchdown.index))
-        for bounce in bounces:
-            self.create_kpv(*bump(acc_norm, bounce.slice.stop))
+        if bounces is not None:
+            for bounce in bounces:
+                self.create_kpv(*bump(acc_norm, bounce.slice.stop))
 
 
 class AccelerationNormalAboveWeightLimitAtTouchdown(KeyPointValueNode):
@@ -978,8 +1011,8 @@ class LoadFactorThresholdAtTouchdown(KeyPointValueNode):
         for idx, tdwn in enumerate(tdwns+touch_and_go):
             # Find the maximum roll in the second prior to the touchdown.
             ratio = roll.frequency / self.frequency
-            scope = slice((tdwn.index - 1) * ratio,
-                                      (tdwn.index * ratio) + 1)
+            scope = slices_int((tdwn.index - 1) * ratio,
+                               (tdwn.index * ratio) + 1)
             roll_tdwn = np.ma.max(abs(roll.array[scope]))
 
             gw_value = [k.value for k in gw_kpv if k.index == tdwn.index]
@@ -1111,7 +1144,7 @@ class AccelerationNormalOffset(KeyPointValueNode):
         the average for this section(s) if there are enough samples.
         '''
         unmasked_data = []
-        for taxi in taxiing.get_slices():
+        for taxi in slices_int(taxiing.get_slices()):
             unmasked_data.extend(np.ma.compressed(acc_norm.array[taxi]))
         if len(unmasked_data) > 20:
             delta = np.sum(unmasked_data) / float(len(unmasked_data)) - 1.0
@@ -1248,12 +1281,13 @@ class AirspeedGustsDuringFinalApproach(KeyPointValueNode):
         for descent in descents:
             # Ensure we encompass the range of interest.
             scope = slice(descent.start - 5, descent.stop + 5)
+            _scope = slices_int(scope)
             # We'd like to use groundspeed to compute the wind gust, but
             # variations in airspeed are a suitable backstop.
             if gnd_spd:
-                headwind = air_spd.array[scope] - gnd_spd.array[scope]
+                headwind = air_spd.array[_scope] - gnd_spd.array[_scope]
             else:
-                headwind = air_spd.array[scope] - air_spd.array[scope][0]
+                headwind = air_spd.array[_scope] - air_spd.array[_scope][0]
             # Precise indexing is used as this is only a short segment. Note
             # that the _idx values are floating point interpolations of the
             # radio altimeter signal, and the headwind array is also
@@ -1449,6 +1483,26 @@ class Airspeed1000To8000FtMax(KeyPointValueNode):
                 max_value
             )
 
+class Airspeed1000To8000FtMaxQNH(KeyPointValueNode):
+    '''
+    Maximum airspeed between 1000ft QNH and 8000ft QNH during climb.
+    '''
+
+    name = 'Airspeed 1000 To 8000 Ft Max QNH'
+    units = ut.KT
+
+    def derive(self,
+               air_spd=P('Airspeed'),
+               alt_qnh=P('Altitude QNH'),
+               climbs=S('Climb')):
+
+        alt_band = np.ma.masked_outside(alt_qnh.array, 1000, 8000)
+        alt_climb_sections = valid_slices_within_array(alt_band, climbs)
+        self.create_kpvs_within_slices(
+            air_spd.array,
+            alt_climb_sections,
+            max_value,
+        )
 
 class Airspeed8000To10000FtMax(KeyPointValueNode):
     '''
@@ -1595,6 +1649,26 @@ class Airspeed8000To5000FtMax(KeyPointValueNode):
                 max_value
             )
 
+class Airspeed8000To5000FtMaxQNH(KeyPointValueNode):
+    '''
+    Maximum airspeed during descent between 8000ft QNH and 5000ft QNH.
+    '''
+
+    name = 'Airspeed 8000 To 5000 Ft Max QNH'
+    units = ut.KT
+
+    def derive(self,
+               air_spd=P('Airspeed'),
+               alt_qnh=P('Altitude QNH'),
+               descents=S('Descent')):
+
+            alt_band = np.ma.masked_outside(alt_qnh.array, 8000, 5000)
+            alt_descent_sections = valid_slices_within_array(alt_band, descents)
+            self.create_kpvs_within_slices(
+                air_spd.array,
+                alt_descent_sections,
+                max_value,
+            )
 
 class Airspeed5000To3000FtMax(KeyPointValueNode):
     '''
@@ -1610,6 +1684,27 @@ class Airspeed5000To3000FtMax(KeyPointValueNode):
 
         alt_band = np.ma.masked_outside(alt_aal.array, 5000, 3000)
         alt_descent_sections = valid_slices_within_array(alt_band, descent)
+        self.create_kpvs_within_slices(
+            air_spd.array,
+            alt_descent_sections,
+            max_value,
+        )
+
+class Airspeed5000To3000FtMaxQNH(KeyPointValueNode):
+    '''
+    Maximum airspeed during descent between 5000ft QNH to 3000ft QNH.
+    '''
+
+    name = 'Airspeed 5000 To 3000 Ft Max QNH'
+    units = ut.KT
+
+    def derive(self,
+               air_spd=P('Airspeed'),
+               alt_qnh=P('Altitude QNH'),
+               descents=S('Descent')):
+
+        alt_band = np.ma.masked_outside(alt_qnh.array, 5000, 3000)
+        alt_descent_sections = valid_slices_within_array(alt_band, descents)
         self.create_kpvs_within_slices(
             air_spd.array,
             alt_descent_sections,
@@ -1635,6 +1730,26 @@ class Airspeed3000To1000FtMax(KeyPointValueNode):
         )
 
 
+class Airspeed3000To1000FtMaxQNH(KeyPointValueNode):
+    '''
+    Maximum airspeed during descent between 3000ft QNH and 1000ft QNH.
+    '''
+
+    name = 'Airspeed 3000 To 1000 Ft Max QNH'
+    units = ut.KT
+
+    def derive(self,
+               air_spd=P('Airspeed'),
+               alt_qnh=P('Altitude QNH'),
+               descents=S('Descent')):
+
+        alt_band = np.ma.masked_outside(alt_qnh.array, 3000, 1000)
+        alt_descent_sections = valid_slices_within_array(alt_band, descents)
+        self.create_kpvs_within_slices(
+            air_spd.array,
+            alt_descent_sections,
+            max_value,
+        )
 
 
 class Airspeed1000To500FtMax(KeyPointValueNode):
@@ -1700,105 +1815,6 @@ class Airspeed1000To500FtMin(KeyPointValueNode):
             alt_descent_sections,
             min_value,
         )
-
-
-class Airspeed500To100FtMax(KeyPointValueNode):
-    '''
-    Maximum airspeed during the final approach between 500ft AAL and 100ft AAL.
-    '''
-
-    units = ut.KT
-
-    can_operate = helicopter_only
-
-    def derive(self,
-               air_spd=P('Airspeed'),
-               alt_agl=P('Altitude AGL For Flight Phases'),
-               descending=S('Descent')):
-
-        alt_band = np.ma.masked_outside(alt_agl.array, 500, 100)
-        alt_descent_sections = valid_slices_within_array(alt_band, descending)
-        self.create_kpvs_within_slices(
-            air_spd.array,
-            alt_descent_sections,
-            max_value,
-            min_duration=HOVER_MIN_DURATION,
-            freq=air_spd.frequency)
-
-
-class Airspeed500To100FtMin(KeyPointValueNode):
-    '''
-    Minimum airspeed during the final approach between 500ft AAL and 100ft AAL.
-    '''
-
-    units = ut.KT
-
-    can_operate = helicopter_only
-
-    def derive(self,
-               air_spd=P('Airspeed'),
-               alt_agl=P('Altitude AGL For Flight Phases'),
-               descending=S('Descent'),
-               ac_type=A('Aircraft Type')):
-
-        alt_band = np.ma.masked_outside(alt_agl.array, 500, 100)
-        alt_descent_sections = valid_slices_within_array(alt_band, descending)
-        self.create_kpvs_within_slices(
-            air_spd.array,
-            alt_descent_sections,
-            min_value,
-            min_duration=HOVER_MIN_DURATION,
-            freq=air_spd.frequency)
-
-
-class Airspeed100To20FtMax(KeyPointValueNode):
-    '''
-    Maximum airspeed during the final approach and landing between 100 AAL and 20ft AAL.
-    '''
-
-    units = ut.KT
-
-    can_operate = helicopter_only
-
-    def derive(self,
-               air_spd=P('Airspeed'),
-               alt_agl=P('Altitude AGL For Flight Phases'),
-               descending=S('Descent'),
-               ac_type=A('Aircraft Type')):
-
-        alt_band = np.ma.masked_outside(alt_agl.array, 100, 20)
-        alt_descent_sections = valid_slices_within_array(alt_band, descending)
-        self.create_kpvs_within_slices(
-            air_spd.array,
-            alt_descent_sections,
-            max_value,
-            min_duration=HOVER_MIN_DURATION,
-            freq=air_spd.frequency)
-
-
-class Airspeed100To20FtMin(KeyPointValueNode):
-    '''
-    Minimum airspeed during the final approach and landing between 100 AAL and 20ft AAL.
-    '''
-
-    units = ut.KT
-
-    can_operate = helicopter_only
-
-    def derive(self,
-               air_spd=P('Airspeed'),
-               alt_agl=P('Altitude AGL For Flight Phases'),
-               descending=S('Descent'),
-               ac_type=A('Aircraft Type')):
-
-        alt_band = np.ma.masked_outside(alt_agl.array, 100, 20)
-        alt_descent_sections = valid_slices_within_array(alt_band, descending)
-        self.create_kpvs_within_slices(
-            air_spd.array,
-            alt_descent_sections,
-            min_value,
-            min_duration=HOVER_MIN_DURATION,
-            freq=air_spd.frequency)
 
 
 class Airspeed500To20FtMax(KeyPointValueNode):
@@ -1895,136 +1911,6 @@ class Airspeed500To50FtMedianMinusAirspeedSelected(KeyPointValueNode):
                                 spd_500_to_50.value - spd_sel)
 
 
-class Airspeed20FtToTouchdownMax(KeyPointValueNode):
-    '''
-    Maximum airspeed between 20ft AGL and touchdown.
-    '''
-
-    units = ut.KT
-
-    can_operate = helicopter_only
-
-    def derive(self,
-               air_spd=P('Airspeed'),
-               alt_agl=P('Altitude AGL For Flight Phases'),
-               touchdowns=KTI('Touchdown')):
-
-        self.create_kpvs_within_slices(
-            air_spd.array,
-            alt_agl.slices_to_kti(20, touchdowns),
-            max_value,
-        )
-
-
-class Airspeed2NMToOffshoreTouchdown(KeyPointValueNode):
-    '''
-    Airspeed 2NM from offshore touchdown. Helicopter only.
-    '''
-
-    units = ut.KT
-
-    name = 'Airspeed 2 NM To Touchdown'
-
-    can_operate = helicopter_only
-
-    def derive(self, airspeed=P('Airspeed'), dtts=P('Distance To Touchdown'),
-               touchdown=KTI('Offshore Touchdown')):
-
-        for tdwn in touchdown:
-            dist_to_touchdown = dtts.get_previous(tdwn.index, name='2.0 NM To Touchdown')
-            if dist_to_touchdown:
-                self.create_kpvs_at_ktis(airspeed.array, [dist_to_touchdown])
-
-
-class AirspeedAbove101PercentRotorSpeed(KeyPointValueNode):
-    '''
-    Airspeed At or Above 101% Rotor Speed. Helicopter only.
-    '''
-    name = 'Airspeed Above 101 Percent Rotor Speed'
-    can_operate = helicopter_only
-
-    def derive(self,
-               airspeed=P('Airspeed'),
-               airborne=S('Airborne'),
-               nr=P('Nr'),
-               ):
-        nr_above_101 = nr.array >= 101.0
-        airborne_slices = airborne.get_slices()
-        slices_above_101_pct = runs_of_ones(nr_above_101)
-        above_101_while_airborne = slices_and(airborne_slices, slices_above_101_pct)
-        self.create_kpvs_within_slices(airspeed.array, above_101_while_airborne, max_value)
-
-
-class AirspeedAbove500FtMin(KeyPointValueNode):
-    '''
-    Minimum airspeed above 500ft AGL during standard approaches (helicopter only)
-    '''
-
-    units = ut.KT
-
-    can_operate = helicopter_only
-
-    def derive(self, air_spd= P('Airspeed'), alt_agl=P('Altitude AGL For Flight Phases'),
-               approaches=App('Approach Information')):
-
-        app_slices = []
-        for approach in approaches:
-            if approach.type in ['SHUTTLING','AIRBORNE_RADAR']:
-                app_slices.append(approach.slice)
-
-        for alt_agl_slice in alt_agl.slices_above(500):
-            if any([slices_overlap(app_slice, alt_agl_slice) for app_slice in app_slices]):
-                continue
-            else:
-                self.create_kpv_from_slices(air_spd.array,[alt_agl_slice], min_value)
-
-
-class AirspeedAbove500FtMinOffshoreSpecialProcedure(KeyPointValueNode):
-    '''
-    Minimum airspeed above 500ft AGL during a Shuttling Approach, ARDA
-    or AROA (helicopter only)
-    '''
-
-    units = ut.KT
-    can_operate = helicopter_only
-    def derive(self, air_spd= P('Airspeed'), alt_agl=P('Altitude AGL For Flight Phases'),
-               approaches=App('Approach Information')):
-
-        app_slices = []
-        for approach in approaches:
-            if approach.type in ['SHUTTLING','AIRBORNE_RADAR']:
-                app_slices.append(approach.slice)
-
-        for alt_agl_slice in alt_agl.slices_above(500):
-            for app_slice in app_slices:
-                if slices_overlap(app_slice, alt_agl_slice):
-                    self.create_kpv_from_slices(air_spd.array,[alt_agl_slice], min_value)
-
-
-class AirspeedAt200FtDuringOnshoreApproach(KeyPointValueNode):
-    '''
-    Approach airspeed at 200ft AGL (helicopter only)
-    '''
-
-    units = ut.KT
-    can_operate = helicopter_only
-
-    def derive(self, air_spd=P('Airspeed'), alt_agl=P('Altitude AGL For Flight Phases'),
-               approaches=App('Approach Information'), offshore=M('Offshore')):
-        for approach in approaches:
-            # check if landed/lowest point of approach is Offshore. May trigger incorrectly
-            # close to coast. Will be able to improve once we have implemented Rig locations
-            if value_at_index(offshore.array, approach.slice.stop, interpolate=False) == 'Offshore':
-                continue
-
-            index = index_at_value(alt_agl.array, 200,
-                                   _slice=slice(approach.slice.stop, approach.slice.start, -1))
-            if not index:
-                continue
-            value = value_at_index(air_spd.array, index)
-            self.create_kpv(index, value)
-
-
 class AirspeedAtTouchdown(KeyPointValueNode):
     '''
     Airspeed measurement at the point of Touchdown.
@@ -2055,7 +1941,7 @@ class AirspeedMinsToTouchdown(KeyPointValueNode):
         for mtt in mtt_kti:
             # XXX: Assumes that the number will be the first part of the name:
             time = int(mtt.name.split(' ')[0])
-            self.create_kpv(mtt.index, air_spd.array[mtt.index], time=time)
+            self.create_kpv(mtt.index, air_spd.array[int(mtt.index)], time=time)
 
 
 class AirspeedNMToThreshold(KeyPointValueNode):
@@ -2077,67 +1963,7 @@ class AirspeedNMToThreshold(KeyPointValueNode):
         for dtt in dtt_kti:
             # XXX: Assumes that the number will be the first part of the name:
             distance = int(dtt.name.split(' ')[0])
-            self.create_kpv(dtt.index, air_spd.array[dtt.index], distance=distance)
-
-
-
-class AirspeedAtAPGoAroundEngaged(KeyPointValueNode):
-    '''
-    Airspeed at which AP Go Around mode has been engaged. Helicopter only.
-    '''
-
-    name = 'Airspeed At AP Go Around Engaged'
-    units = ut.KT
-
-    can_operate = helicopter_only
-
-    def derive(self, air_spd=P('Airspeed'), airs=S('Airborne'),
-               ap_mode=M('AP Pitch Mode (1)')):
-
-        sections = slices_and(airs.get_slices(),
-                              clump_multistate(ap_mode.array, 'Go Around'))
-        for section in sections:
-            index = section.start
-            value = air_spd.array[index]
-            self.create_kpv(index, value)
-
-
-class AirspeedWhileAPHeadingEngagedMin(KeyPointValueNode):
-    '''
-    Minimum recorded airspeed at which AP Heading mode was engaged. Helicopter only.
-    '''
-
-    name = 'Airspeed While AP Heading Engaged Min'
-    units = ut.KT
-
-    can_operate = helicopter_only
-
-    def derive(self, air_spd=P('Airspeed'), airs=S('Airborne'),
-               ap_mode=M('AP Roll-Yaw Mode (1)')):
-
-        heads = clump_multistate(ap_mode.array, 'Heading')
-        if heads:
-            sections = slices_and(airs.get_slices(), heads)
-            self.create_kpv_from_slices(air_spd.array, sections, min_value)
-
-
-class AirspeedWhileAPVerticalSpeedEngagedMin(KeyPointValueNode):
-    '''
-    Minimum recorded airspeed at which AP VS mode was engaged. Helicopter only.
-    '''
-
-    name = 'Airspeed While AP Vertical Speed Engaged Min'
-    units = ut.KT
-
-    can_operate = helicopter_only
-
-    def derive(self, air_spd=P('Airspeed'), airs=S('Airborne'),
-               ap_mode=M('AP Collective Mode (1)')):
-
-        vss = clump_multistate(ap_mode.array, 'V/S')
-        if vss:
-            sections = slices_and(airs.get_slices(), vss)
-            self.create_kpv_from_slices(air_spd.array, sections, min_value)
+            self.create_kpv(dtt.index, air_spd.array[int(dtt.index)], distance=distance)
 
 
 class AirspeedAtAPUpperModesEngaged(KeyPointValueNode):
@@ -2284,27 +2110,22 @@ class V2AtLiftoff(KeyPointValueNode):
         afr = all_of((
             'AFR V2',
             'Liftoff',
-            'Climb Start',
         ), available) and afr_v2 and afr_v2.value >= AIRSPEED_THRESHOLD
 
         airbus = all_of((
             'Airspeed Selected',
-            'Speed Control',
             'Liftoff',
-            'Climb Start',
             'Manufacturer',
         ), available) and manufacturer and manufacturer.value == 'Airbus'
 
         embraer = all_of((
             'V2-Vac',
             'Liftoff',
-            'Climb Start',
         ), available)
 
         v2 = all_of((
             'V2',
             'Liftoff',
-            'Climb Start',
         ), available)
 
         return v2 or afr or airbus or embraer
@@ -2313,61 +2134,32 @@ class V2AtLiftoff(KeyPointValueNode):
                v2=P('V2'),
                v2_vac=A('V2-Vac'),
                spd_sel=P('Airspeed Selected'),
-               spd_ctl=P('Speed Control'),
                afr_v2=A('AFR V2'),
                liftoffs=KTI('Liftoff'),
-               climb_starts=KTI('Climb Start'),
                manufacturer=A('Manufacturer')):
-
-        # Determine interesting sections of flight which we want to use for V2.
-        # Due to issues with how data is recorded, use five superframes before
-        # liftoff until the start of the climb:
-        starts = deepcopy(liftoffs)
-        for start in starts:
-            start.index = max(start.index - 5 * 64 * self.frequency, 0)
-        phases = slices_from_ktis(starts, climb_starts)
 
         # 1. Use recorded value (if available):
         if v2:
-            for phase in phases:
-                index = liftoffs.get_last(within_slice=phase).index
-                if v2.frequency >= 0.125:
-                    v2_liftoff = closest_unmasked_value(
-                        v2.array, index, start_index=phase.start,
-                        stop_index=phase.stop)
-                    if v2_liftoff:
-                        self.create_kpv(index, v2_liftoff.value)
-                else:
-                    value = most_common_value(v2.array[phase])
-                    self.create_kpv(index, value)
+            for liftoff in liftoffs:
+                last_valid_v2 = last_valid_sample(v2.array[:int(liftoff.index)])
+                if last_valid_v2.value is not None:
+                    self.create_kpv(last_valid_v2.index + 1, last_valid_v2.value)
             return
 
         # 2. Use value provided in achieved flight record (if available):
         if afr_v2 and afr_v2.value >= AIRSPEED_THRESHOLD:
-            for phase in phases:
-                index = liftoffs.get_last(within_slice=phase).index
-                value = round(afr_v2.value)
-                if value is not None:
-                    self.create_kpv(index, value)
+            for liftoff in liftoffs:
+                self.create_kpv(liftoff.index, round(afr_v2.value))
             return
 
-        # 3. Derive parameter for Embraer 170/190:
-        if v2_vac:
-            for phase in phases:
-                value = most_common_value(v2_vac.array[phase])
-                index = liftoffs.get_last(within_slice=phase).index
-                if value is not None:
-                    self.create_kpv(index, value)
-            return
+        v2_param = v2_vac or (spd_sel if manufacturer and manufacturer.value == 'Airbus' else None)
 
-        # 4. Derive parameter for Airbus:
-        if manufacturer and manufacturer.value == 'Airbus':
-            spd_sel.array[spd_ctl.array == 'Manual'] = np.ma.masked
-            for phase in phases:
-                value = most_common_value(spd_sel.array[phase])
-                index = liftoffs.get_last(within_slice=phase).index
-                if value is not None:
-                    self.create_kpv(index, value)
+        # 3. Derive parameter for Embraer 170/190 and Airbus:
+        if v2_param:
+            for liftoff in liftoffs:
+                last_valid_v2 = last_valid_sample(v2_param.array[:int(liftoff.index)])
+                if last_valid_v2.value is not None:
+                    self.create_kpv(last_valid_v2.index + 1, last_valid_v2.value)
             return
 
 
@@ -2443,13 +2235,15 @@ class V2LookupAtLiftoff(KeyPointValueNode):
             if weight_liftoffs:
                 weight_liftoff = weight_liftoffs.get_first(within_slice=phase)
                 index, weight = weight_liftoff.index, weight_liftoff.value
-            else:
+            elif liftoffs.get_first(within_slice=phase).index:
                 index, weight = liftoffs.get_first(within_slice=phase).index, None
+            else:
+                continue
 
             if index is None:
                 continue
 
-            detent = (flap_lever or flap_synth).array[index]
+            detent = (flap_lever or flap_synth).array[int(index)]
 
             try:
                 index = liftoffs.get_last(within_slice=phase).index
@@ -2488,11 +2282,10 @@ class AirspeedSelectedAtLiftoff(KeyPointValueNode):
                 continue
             if spd_sel.frequency >= 0.125:
                 spd_sel_liftoff = prev_unmasked_value(
-                    spd_sel.array, liftoff.index, start_index=phase.start)
+                    spd_sel.array, liftoff.index, start_index=int(phase.start))
                 value = spd_sel_liftoff.value if spd_sel_liftoff else None
             else:
-                value = most_common_value(spd_sel.array[phase])
-
+                value = most_common_value(spd_sel.array[slices_int(phase)])
             if value:
                 self.create_kpv(liftoff.index, value)
             else:
@@ -2522,10 +2315,10 @@ class AirspeedSelectedAtTakeoffAccelerationStart(KeyPointValueNode):
                 continue
             if spd_sel.frequency >= 0.125:
                 spd_sel_tkof_start = prev_unmasked_value(
-                    spd_sel.array, accel_start.index, start_index=phase.start)
+                    spd_sel.array, accel_start.index, start_index=int(phase.start))
                 value = spd_sel_tkof_start.value if spd_sel_tkof_start else None
             else:
-                value = most_common_value(spd_sel.array[phase])
+                value = most_common_value(spd_sel.array[slices_int(phase)])
 
             if value:
                 self.create_kpv(accel_start.index, value)
@@ -4478,32 +4271,19 @@ class AirspeedAboveFL200Min(KeyPointValueNode):
                                        alt.slices_above(20000), min_value)
 
 
-##############################################################################
-# Airspeed Autorotation
-class AirspeedDuringAutorotationMax(KeyPointValueNode):
+class AirspeedAboveStickShakerSpeedMin(KeyPointValueNode):
     '''
-    Maximum airspeed during autorotation (helicopter only)
-    '''
-
-    units = ut.KT
-
-    can_operate = helicopter_only
-
-    def derive(self, airspeed=P('Airspeed'), phase=S('Autorotation')):
-        self.create_kpvs_within_slices(airspeed.array, phase, max_value)
-
-
-class AirspeedDuringAutorotationMin(KeyPointValueNode):
-    '''
-    Minimum airspeed during autorotation (helicopter only)
+    The margin to airspeed stick shaker operation. Available where 'Stick Shaker Speed'
+    is available. Negative value means that Airspeed went below the Stick Shaker Speed.
     '''
 
-    units = ut.KT
+    units=ut.KT
 
-    can_operate = helicopter_only
-
-    def derive(self, airspeed=P('Airspeed'), phase=S('Autorotation')):
-        self.create_kpvs_within_slices(airspeed.array, phase, min_value)
+    def derive(self, ias=P('Airspeed'),
+                     stick_shaker_speed=P('Stick Shaker Speed'),
+                     airborne=S('Airborne'),):
+        diff = ias.array - stick_shaker_speed.array
+        self.create_kpv_from_slices(diff, airborne.get_slices(), min_value)
 
 
 ##############################################################################
@@ -4646,6 +4426,177 @@ class AOAWithFlapDuringDescentMax(KeyPointValueNode):
         self.create_kpvs_within_slices(aoa_flap, descends, max_value)
 
 
+class AOAAbnormalOperationDuration(KeyPointValueNode):
+    '''
+    Duration of abnormal AOA sensors operation. Based on the AOA Abnormal Operation parameter.
+    '''
+    name = 'AOA Abnormal Operation Duration'
+    units = ut.SECOND
+
+    def derive(self, aoa_state=M('AOA Abnormal Operation'),
+               airborne=S('Airborne'),):
+        sections = runs_of_ones(aoa_state.array != '-')
+        sections = slices_and(sections, airborne.get_slices())
+        self.create_kpvs_from_slice_durations(sections, self.hz)
+
+
+class AOABelowStickShakerAOAMin(KeyPointValueNode):
+    '''
+    The margin to stick shaker operation, available where "Stick Shaker AOA" is available.
+    '''
+    name = 'AOA Below Stick Shaker AOA Min'
+    units = ut.DEGREE
+
+    def derive(self, aoa_stick_shaker=P('Stick Shaker AOA'),
+               aoa_l=P('AOA (L)'),
+               aoa_r=P('AOA (R)'),
+               airborne=S('Airborne'),):
+
+        # 1. Merge two AOA sensors and find Max
+        aoa = vstack_params(aoa_l, aoa_r)
+        aoa_max = np.ma.max(aoa, axis=0)
+
+        #2. Subtract AOA Max from AOA Stick Shaker angle
+        aoa_diff = aoa_stick_shaker.array - aoa_max
+
+        #3 Create a KPV, negative value means we've gone above the AOA Stick Shaker angle.
+        self.create_kpv_from_slices(aoa_diff, airborne.get_slices(), min_value)
+
+
+##############################################################################
+# Sensor Mismatch
+
+class AOADifference5SecMax(KeyPointValueNode):
+    '''
+    Maximum recorded AoA difference sustained for at least 5 seconds while Airborne.
+    Left greater than Right = negative value.
+    '''
+
+    name = 'AOA Difference 5 Sec Max'
+    units = ut.DEGREE
+
+    def derive(self,
+               aoa_l=P('AOA (L)'),
+               aoa_r=P('AOA (R)'),
+               airs=S('Airborne'),):
+        diff = aoa_r.array - aoa_l.array
+        diff = second_window(diff, self.hz, 5, extend_window=True)
+        self.create_kpvs_within_slices(diff, airs, max_abs_value)
+
+
+class AirspeedDifference5SecMax(KeyPointValueNode):
+    '''
+    Maximum recorded Airspeed difference sustained for at least 5 seconds while Airborne.
+    '''
+
+    name = 'Airspeed Difference 5 Sec Max'
+    units = ut.KT
+
+    def derive(self,
+               ias=P('Airspeed'),
+               ias_2=P('Airspeed (2)'),
+               airs=S('Airborne'),):
+        diff = ias_2.array - ias.array
+        diff = second_window(diff, self.hz, 5, extend_window=True)
+        self.create_kpvs_within_slices(diff, airs, max_abs_value)
+
+
+##############################################################################
+# MCAS
+
+class AOAFlapsUpAPOffMax(KeyPointValueNode):
+    '''
+    Maximum recorded AoA with Flaps Up and CMD not engaged while Airborne.
+    737 MAX specific.
+    '''
+
+    name = 'AOA Flaps Up AP Off Max'
+    units = ut.DEGREE
+
+    @classmethod
+    def can_operate(cls, available, family=A('Family')):
+        is_max = 'B737 MAX' in family.value if family else None
+        return is_max and all_deps(cls, available)
+
+    def derive(self,
+               aoa_l=P('AOA (L)'),
+               aoa_r=P('AOA (R)'),
+               flap=P('Flap Including Transition'),
+               cmd=M('AP Engaged'),
+               airborne=S('Airborne'),):
+
+        # 1. Merge two AOA sensors and find Max
+        aoa = vstack_params(aoa_l, aoa_r)
+        aoa_max = np.ma.max(aoa, axis=0)
+
+        # 2. Find sections where we are Airborne, with Flaps up and CMD Engaged while Climbing
+        sections = airborne.get_slices()
+        sections = slices_and(sections, runs_of_ones(flap.array == 0))
+        sections = slices_and_not(sections, runs_of_ones(cmd.array == 'Engaged'))
+        sections = slices_and_not(sections, runs_of_ones(cmd.array.mask))
+
+        # 3. Create KPVs
+        self.create_kpvs_within_slices(aoa_max, sections, max_value)
+
+
+class AOAStickShakerMinusAOAFlapsUpAPOffMin(KeyPointValueNode):
+    '''
+    Minimum difference between Stick Shaker AOA angle and AOA with Flaps Up and AP not engaged.
+    737 MAX specific.
+    '''
+    name = 'AOA Stick Shaker Minus AOA Flaps Up AP Off Min'
+    units = ut.DEGREE
+
+    @classmethod
+    def can_operate(cls, available, family=A('Family')):
+        is_max = 'B737 MAX' in family.value if family else None
+        return is_max and all_deps(cls, available)
+
+    def derive(self, aoa_stick_shaker=P('Stick Shaker AOA'),
+               aoa_l=P('AOA (L)'),
+               aoa_r=P('AOA (R)'),
+               airborne=S('Airborne'),
+               flap=P('Flap Including Transition'),
+               cmd=M('AP Engaged'),):
+
+        # 1. Merge two AOA sensors and find Max
+        aoa = vstack_params(aoa_l, aoa_r)
+        aoa_max = np.ma.max(aoa, axis=0)
+
+        #2. Subtract AOA Max from Stick Shaker AOA angle
+        aoa_diff = aoa_stick_shaker.array - aoa_max
+
+        sections = airborne.get_slices()
+        sections = slices_and(sections, runs_of_ones(flap.array == 0))
+        sections = slices_and_not(sections, runs_of_ones(cmd.array == 'Engaged'))
+        sections = slices_and_not(sections, runs_of_ones(cmd.array.mask))
+
+        self.create_kpvs_within_slices(aoa_diff, sections, min_value)
+
+
+class TrimDownWhileControlColumnUpDuration(KeyPointValueNode):
+    '''
+    Duration of Control Column up input with simultaneous trim down.
+    This could indicate that MCAS is active.
+    737 MAX specific.
+    '''
+
+    units = ut.SECOND
+
+    @classmethod
+    def can_operate(cls, available, family=A('Family')):
+        is_max = 'B737 MAX' in family.value if family else None
+        return is_max and all_deps(cls, available)
+
+    def derive(self, cc=P('Control Column'),
+               pitch_trim=P('AP Trim Down'),
+               airborne=S('Airborne'),):
+        sections = runs_of_ones(cc.array > 5)
+        sections = slices_and(sections, runs_of_ones(pitch_trim.array == 'Trim'))
+        sections = slices_and(sections, airborne.get_slices())
+        self.create_kpvs_from_slice_durations(sections, self.hz)
+
+
 ##############################################################################
 class ThrustReversersDeployedDuration(KeyPointValueNode):
     '''
@@ -4713,7 +4664,7 @@ class ThrustReversersCancelToEngStopDuration(KeyPointValueNode):
             # reversers being cancelled and the engine stop
             return
         cancels = find_edges_on_state_change(
-            'Deployed', tr.array[start:stop], change='leaving')
+            'Deployed', tr.array[slices_int(start, stop)], change='leaving')
         if cancels:
             # TRs were cancelled before engine stopped
             cancel_index = cancels[-1] + start
@@ -4760,6 +4711,10 @@ class TouchdownToSpoilersDeployedDuration(KeyPointValueNode):
 
     units = ut.SECOND
 
+    @classmethod
+    def can_operate(cls, available):
+        return all_of(('Speedbrake Selected', 'Landing', 'Touchdown'), available)
+
     def derive(self, brake=M('Speedbrake Selected'),
                lands=S('Landing'), tdwns=KTI('Touchdown')):
         '''
@@ -4770,7 +4725,7 @@ class TouchdownToSpoilersDeployedDuration(KeyPointValueNode):
         for land in lands:
             deployed = False
             for deploy in deploys:
-                if not is_index_within_slice(deploy, land.slice):
+                if not is_index_within_slice(deploy, land.slice) or deployed:
                     continue
                 for tdwn in tdwns:
                     if not is_index_within_slice(tdwn.index, land.slice):
@@ -4990,11 +4945,27 @@ class BrakeTempAfterTouchdownDelta(KeyPointValueNode):
     units = ut.CELSIUS
 
     def derive(self, brakes=P('Brake (*) Temp Avg'), touchdowns=S('Touchdown')):
-        touchdown = touchdowns.get_last().index
+        touchdown = int(touchdowns.get_last().index)
         max_temp_idx = np.ma.argmax(brakes.array[touchdown:]) + touchdown
         max_temp = value_at_index(brakes.array, max_temp_idx)
-        min_temp = np.ma.min(brakes.array[touchdown:max_temp_idx + 1])
+        min_temp = np.ma.min(brakes.array[slices_int(touchdown,max_temp_idx + 1)])
         self.create_kpv(max_temp_idx, max_temp - min_temp)
+
+
+class BrakeTempBeforeTakeoffMax(KeyPointValueNode):
+    '''
+    Maximum Brake Temperture during taxi out to liftoff.
+    '''
+
+    units = ut.CELSIUS
+
+    def derive(self, brakes=P('Brake (*) Temp Max'), taxiout=S('Taxi Out'),
+               liftoff=KTI('Liftoff')):
+        self.create_kpvs_within_slices(
+            brakes.array,
+            [slice(taxiout.get_first().slice.start, liftoff.get_first().index),],
+            max_value
+        )
 
 
 class BrakePressureInTakeoffRollMax(KeyPointValueNode):
@@ -5005,7 +4976,7 @@ class BrakePressureInTakeoffRollMax(KeyPointValueNode):
     using the rudder (dragging toes on pedals)."
     '''
 
-    units = None  # FIXME
+    units = ut.PSI
 
     def derive(self, bp=P('Brake Pressure'),
                rolls=S('Takeoff Roll Or Rejected Takeoff')):
@@ -5055,6 +5026,50 @@ class DelayedBrakingAfterTouchdown(KeyPointValueNode):
                 if minus_10 is None or minus_60 is None:
                     continue
                 self.create_kpv(minus_60, (minus_60 - minus_10) / gs.hz)
+
+
+class DecelerationAfterTouchdownAvg(KeyPointValueNode):
+    '''
+    Average deceleration after the aircraft has touched down.
+
+    The KPV measures the average deceleration between V-10 kt and V-60 kt or 60 kt
+    whichever is the greatest where V is the ground speed at touchdown.
+    '''
+
+    units = ut.KT_S
+
+    def derive(self,
+               lands=S('Landing'),
+               gs=P('Groundspeed'),
+               tdwns=KTI('Touchdown')):
+        '''
+        Reverse thrust is usually applied after the main gear touches down,
+        possibly along with the autobrake, to reduce the speed of the aircraft. If
+        the deceleration of the aircraft is slow, it is a possible indication of
+        delay in use of reverse thrust.
+
+        Reference was made to the following documentation to assist with the
+        development of this algorithm:
+
+        - A320 Flight Profile Specification
+        - A321 Flight Profile Specification
+        '''
+        for land in lands:
+            for tdwn in tdwns.get(within_slice=land.slice):
+                gs_td = value_at_index(gs.array, tdwn.index)
+                if gs_td is None:
+                    continue
+                hi_spd = gs_td - 10.0
+                hi_spd_idx = index_at_value(gs.array, hi_spd, land.slice)
+                low_spd = max(60.0, gs_td - 60.0)
+                if low_spd >= hi_spd:
+                    continue
+                low_spd_idx = index_at_value(gs.array, low_spd, land.slice)
+                if hi_spd_idx is None or low_spd_idx is None:
+                    continue
+                dt = (low_spd_idx - hi_spd_idx) / gs.hz
+                dv = hi_spd - low_spd
+                self.create_kpv(low_spd_idx, dv / dt)
 
 
 class AutobrakeRejectedTakeoffNotSetDuringTakeoff(KeyPointValueNode):
@@ -5181,7 +5196,7 @@ class AltitudeOvershootAtSuspectedLevelBust(KeyPointValueNode):
                 rev_slice = slice(rev_idx, rev_slice.stop, -1)
 
                 lvl_off_vals = []
-                for bust_slice in (fwd_slice, rev_slice):
+                for bust_slice in slices_int((fwd_slice, rev_slice)):
                     # find level off indices
                     #alt_diff = np.ma.abs(np.ma.diff(alt_std.array[bust_slice])) < (2 * alt_std.hz)
                     try:
@@ -5300,73 +5315,6 @@ class AltitudeInCruiseAverage(KeyPointValueNode):
 
 
 ########################################
-# Altitude: Helicopter
-
-
-class AltitudeDensityMax(KeyPointValueNode):
-    '''
-    Maximum altitude density.
-    '''
-
-    units = ut.FT
-
-    can_operate = helicopter_only
-
-    def derive(self, alt_density=P('Altitude Density'), airborne=S('Airborne')):
-        self.create_kpv_from_slices(
-            alt_density.array,
-            airborne.get_slices(),
-            max_value
-        )
-
-
-class AltitudeRadioDuringAutorotationMin(KeyPointValueNode):
-    '''
-    Minimum altitude (radio) during autorotation.
-    '''
-
-    units = ut.FT
-
-    can_operate = helicopter_only
-
-    def derive(self, alt_rad=P('Altitude Radio'), autorotation=S('Autorotation')):
-        self.create_kpvs_within_slices(alt_rad.array, autorotation, min_value)
-
-
-class AltitudeDuringCruiseMin(KeyPointValueNode):
-    '''
-    Minimum altitude (AGL) recorded during cruise (helicopter only).
-    '''
-
-    units = ut.FT
-    can_operate = helicopter_only
-
-    def derive(self, alt_agl=P('Altitude AGL'), cruise=S('Cruise')):
-        self.create_kpvs_within_slices(alt_agl.array, cruise, min_value)
-
-
-class AltitudeRadioAtNoseDownAttitudeInitiation(KeyPointValueNode):
-    '''
-    Radio altitude at nose down attitude initiation.
-    '''
-    units = ut.FT
-    align_frequency = 16
-
-    @classmethod
-    def can_operate(cls, available, ac_type=A('Aircraft Type'),
-                    family=A('Family')):
-        return ac_type == helicopter and family and family.value == 'H175'\
-               and all_of(('Altitude Radio', 'Nose Down Attitude Adoption'),
-                   available)
-
-    def derive(self, rad_alt=P('Altitude Radio'),
-               nose_downs=S('Nose Down Attitude Adoption')):
-
-        for nose_down in nose_downs:
-            self.create_kpv(nose_down.slice.start,
-                            rad_alt.array[nose_down.slice.start])
-
-########################################
 # Altitude: Flap
 
 
@@ -5462,22 +5410,22 @@ class AltitudeAtFlapExtensionWithGearDownSelected(KeyPointValueNode):
         # Raw flap values must increase to detect extensions.
         extend = np.ma.diff(flap.array.raw) > 0
 
-        for in_air in airborne.get_slices():
+        for in_air in slices_int(airborne.get_slices()):
             for index in np.ma.where(extend[in_air])[0]:
                 # The flap we are moving to is +1 from the diff index
                 index = (in_air.start or 0) + index + 1
                 if gear_ext.array[index] != 'Down':
                     continue
                 value = alt_aal.array[index]
-                try:
-                    self.create_kpv(index, value, flap=flap.array[index])
-                except:
+                for i in range(1+int(flap.hz*2)):
                     # Where flap values are mapped onto bits in the recorded
                     # word (e.g. E170 family), the new flap setting may clash
                     # with the old value, giving a transient indication of
                     # both flap readings. This is a crude fix to avoid this
                     # type of error condition.
-                    self.create_kpv(index, value, flap=flap.array[index + 2])
+                    if flap.array[index] != NO_MAPPING:
+                        self.create_kpv(index, value, flap=flap.array[index+i])
+                        break
 
 
 class AirspeedAtFlapExtension(KeyPointValueNode):
@@ -5498,7 +5446,7 @@ class AirspeedAtFlapExtension(KeyPointValueNode):
         # Raw flap values must increase to detect extensions.
         extend = np.ma.diff(flap.array.raw) > 0
 
-        for air_down in airborne.get_slices():
+        for air_down in slices_int(airborne.get_slices()):
             for index in np.ma.where(extend[air_down])[0]:
                 # The flap we are moving to is +1 from the diff index
                 index = (air_down.start or 0) + index + 1
@@ -5537,9 +5485,9 @@ class AirspeedAtFlapExtensionWithGearDownSelected(KeyPointValueNode):
 
         for in_air in airborne.get_slices():
             # iterate over each extension
-            for index in np.ma.where(extend[in_air])[0]:
+            for index in np.ma.where(extend[slices_int(in_air)])[0]:
                 # The flap we are moving to is +1 from the diff index
-                index = (in_air.start or 0) + index + 1
+                index = int((in_air.start or 0) + index + 1)
                 if gear_ext.array[index] != 'Down':
                     continue
                 value = value_at_index(air_spd.array, index)
@@ -5636,11 +5584,11 @@ class AltitudeAtLastFlapChangeBeforeTouchdown(KeyPointValueNode):
                 # auto retraction happened within three seconds of the
                 # touchdown, set the endpoint to three seconds before touchdown.
                 delta = int(3 * flap.hz)
-                if far.array.raw[endpoint - delta] == 0 and \
-                        far.array.raw[endpoint + delta] == 1:
+                if far.array.raw[int(endpoint - delta)] == 0 and \
+                        far.array.raw[int(endpoint + delta)] == 1:
                     endpoint = endpoint - delta
 
-            land_flap = flap.array.raw[endpoint]
+            land_flap = flap.array.raw[int(endpoint)]
             flap_move = abs(flap.array.raw - land_flap)
             rough_index = index_at_value(flap_move, 0.5, slice(endpoint, 0, -1))
             # index_at_value tries to be precise, but in this case we really
@@ -5677,21 +5625,31 @@ class AltitudeAtLastFlapSelectionBeforeTouchdown(KeyPointValueNode):
         last_tdwn = 0
         for tdwn in tdwns:
             for flap_pos in self.NAME_VALUES['flap']:
-                flap_slices = slices_and(
+                flap_slices = slices_int(slices_and(
                     [slice(last_tdwn, tdwn.index), ],
                     slices_between(flap.array.raw, flap_pos-1, flap_pos+1)[1]
-                )
+                ))
                 if not flap_slices:
                     continue
-                #for flap_slice in flap_slices:
+
                 for flap_slice in reversed(flap_slices):
-                    flap_start = flap_slice.start
+                    flap_start = int(flap_slice.start)
+
+                    if flap.array[flap_start-1] is np.ma.masked or flap.array[flap_start] is np.ma.masked:
+                        continue
+
+                    # String comparison works as Python compares the ordinal value of each character
+                    # from left to right until one is greater than the other. As the 'Flap Lever' multi-state
+                    # parameter always starts with 'Lever ', the comparison will be between numbers of increasing
+                    # value and the character 'F', which will always be greater than a number.
+
                     if flap.array[flap_start-1] < flap.array[flap_start]:
                         self.create_kpv(flap_start,
                                         value_at_index(alt_aal.array,
                                                        flap_start),
                                         replace_values={'flap':flap_pos})
                         break
+
             last_tdwn = tdwn.index + 1
 
 
@@ -5722,7 +5680,7 @@ class AltitudeAtFirstFlapRetractionDuringGoAround(KeyPointValueNode):
             for flap_ret in flap_rets.get_ordered_by_index(within_slice=go_around.slice):
                 if flap_ret.index > pit_index:
                     # Use height between go around minimum and gear up:
-                    flap_up_ht = alt_aal.array[flap_ret.index] - pit_value
+                    flap_up_ht = alt_aal.array[int(flap_ret.index)] - pit_value
                     self.create_kpv(flap_ret.index, flap_up_ht)
                     break
 
@@ -5740,7 +5698,7 @@ class AltitudeAtFirstFlapRetraction(KeyPointValueNode):
 
         flap_ret = flap_rets.get_first()
         if flap_ret:
-            self.create_kpv(flap_ret.index, alt_aal.array[flap_ret.index])
+            self.create_kpv(flap_ret.index, alt_aal.array[int(flap_ret.index)])
 
 
 class AltitudeAtLastFlapRetraction(KeyPointValueNode):
@@ -5757,7 +5715,7 @@ class AltitudeAtLastFlapRetraction(KeyPointValueNode):
 
         flap_ret = flap_rets.get_last()
         if flap_ret:
-            self.create_kpv(flap_ret.index, alt_aal.array[flap_ret.index])
+            self.create_kpv(flap_ret.index, alt_aal.array[int(flap_ret.index)])
 
 
 class AltitudeAtClimbThrustDerateDeselectedDuringClimbBelow33000Ft(KeyPointValueNode):
@@ -5775,6 +5733,27 @@ class AltitudeAtClimbThrustDerateDeselectedDuringClimbBelow33000Ft(KeyPointValue
                                            derate_deselected.index)
             if alt_aal_value < 33000:
                 self.create_kpv(derate_deselected.index, alt_aal_value)
+
+
+class AltitudeAtClimbThrustDerateSelection(KeyPointValueNode):
+    '''
+    Based on the Takeoff Mode TMC parameter which changes to '-' as soon as VNAV, or other speed management mode is
+    engaged. We can't look at a reduction of N1/EPR as usually the reduction is only by 1-3%, sometimes it will be
+    the same, and in other cases we might even see an increase - rare scenario when TO-2 and CLB are selected.
+
+    Uses Altitude AAL
+    '''
+
+    units = ut.FT
+
+    def derive(self, alt_aal=P('Altitude AAL'),
+               tmc=M('Takeoff Mode (TMC) Operation'),
+               airborne=S('Airborne'),):
+
+        sections = slices_and(runs_of_ones(tmc.array == '-'), airborne.get_slices())
+
+        for s in sections:
+            self.create_kpv(s.start, alt_aal.array[s.start])
 
 
 ########################################
@@ -5867,7 +5846,7 @@ class AltitudeAtGearUpSelectionDuringGoAround(KeyPointValueNode):
             for gear_up in gear_up_sel.get(within_slice=go_around.slice):
                 if gear_up.index > pit_index:
                     # Use height between go around minimum and gear up:
-                    gear_up_ht = alt_aal.array[gear_up.index] - pit_value
+                    gear_up_ht = alt_aal.array[int(gear_up.index)] - pit_value
                     self.create_kpv(gear_up.index, gear_up_ht)
 
                 # The else condition below led to creation of a zero KPV in
@@ -6044,6 +6023,7 @@ class ATEngagedAPDisengagedOutsideClimbDuration(KeyPointValueNode):
     '''
 
     name = 'AT Engaged AP Disengaged Outside Climb Duration'
+    units = ut.SECOND
 
     @classmethod
     def can_operate(cls, available, ac_family=A('Family')):
@@ -6199,142 +6179,45 @@ class HeightSelectedOnApproachMin(KeyPointValueNode):
             self.create_kpv(sel_ht_index + app.slice.start, sel_ht_value)
 
 
-##############################################################################
-# Collective
+########################################
+# QNH difference during Approach
 
 
-class CollectiveFrom10To60PercentDuration(KeyPointValueNode):
+class QNHDifferenceDuringApproach(KeyPointValueNode):
     '''
-    Collective from 10% to 60% duration.
-    '''
+    This KPV calculates the QNH difference between actual QNH and expected
+    QNH during approach when crossing 100 ft AAL in descent or at the minimum
+    altitude reached (due to go around) whichever is greater. 100 ft altitude
+    will avoid any ground effect which induces a dip in Altitude STD during
+    flare. Actual QNH is the QNH set by the pilots. Expected QNH is the QNH 
+    required to read the runway elevation on the ground.
 
-    can_operate = helicopter_only
+    Altitude Visualization With Ground Offset provides the expected QNH altitude.
 
-    name = 'Collective From 10 To 60% Duration'
-    units = ut.SECOND
-
-    def derive(self, collective=P('Collective'), rtr=S('Rotors Turning')):
-        start = 10
-        end = 60
-        target_ranges = np.ma.clump_unmasked(np.ma.masked_outside(collective.array, start - 1, end + 1))
-        valid_sections = []
-        for section in target_ranges:
-            if (np.ma.ptp(collective.array[max(section.start-1, 0): section.stop+1]) > end - start) and \
-               (collective.array[section.start] < collective.array[section.stop]) and \
-               ((section.stop - section.start) < collective.frequency*10.0):
-                valid_sections.append(section)
-        self.create_kpvs_from_slice_durations(slices_and(valid_sections, rtr.get_slices()),
-                                              collective.frequency)
-
-
-##############################################################################
-# Tail Rotor
-
-class TailRotorPedalWhileTaxiingABSMax(KeyPointValueNode):
-    '''
-    Maximum Absolute tail rotor pedal during ground taxi (helicopter_only).
+    Wrong QNH are particularly dangerous during non-precision approaches, as
+    they are the sole reference to the aircraft vertical profile.
     '''
 
-    name = 'Tail Rotor Pedal While Taxiing ABS Max'
+    name = 'QNH Difference During Approach'
+    units = ut.MILLIBAR
 
-    can_operate = helicopter_only
+    def derive(self, alt_qnh=P('Altitude QNH'),
+               alt_viz=P('Altitude Visualization With Ground Offset'),
+               alt_aal=P('Altitude AAL'),
+               apps=App('Approach Information')):
 
-    units = ut.PERCENT
-
-    def derive(self, pedal=P('Tail Rotor Pedal'), taxiing=S('Taxiing')):
-        self.create_kpvs_within_slices(pedal.array, taxiing.get_slices(),
-                                       max_abs_value)
-
-
-class TailRotorPedalWhileTaxiingMax(KeyPointValueNode):
-    '''
-    Maximum tail rotor pedal during ground taxi (helicopter_only).
-    '''
-    can_operate = helicopter_only
-
-    units = ut.PERCENT
-
-    def derive(self, pedal=P('Tail Rotor Pedal'), taxiing=S('Taxiing')):
-        self.create_kpvs_within_slices(pedal.array, taxiing.get_slices(),
-                                       max_value)
-
-
-class TailRotorPedalWhileTaxiingMin(KeyPointValueNode):
-    '''
-    Minimum tail rotor pedal during ground taxi (helicopter only).
-    '''
-    can_operate = helicopter_only
-
-    units = ut.PERCENT
-
-    def derive(self, pedal=P('Tail Rotor Pedal'), taxiing=S('Taxiing')):
-        self.create_kpvs_within_slices(pedal.array, taxiing.get_slices(),
-                                       min_value)
-
-
-##############################################################################
-# Cyclic
-
-class CyclicDuringTaxiMax(KeyPointValueNode):
-    '''
-    Maximum cyclic angle during taxi.
-    '''
-
-    can_operate = helicopter_only
-
-    units = ut.DEGREE
-
-    def derive(self, cyclic=P('Cyclic Angle'), taxi=S('Taxiing'), rtr=S('Rotors Turning')):
-        self.create_kpvs_within_slices(cyclic.array, slices_and(taxi.get_slices(),
-                                                                rtr.get_slices()),
-                                       max_value)
-
-
-class CyclicLateralDuringTaxiMax(KeyPointValueNode):
-    '''
-    Measures the maximum lateral displacement of the cyclic from the neutral point during ground taxi phase.
-    '''
-
-    can_operate = helicopter_only
-
-    units = ut.DEGREE
-
-    def derive(self, cyclic=P('Cyclic Lateral'), taxi=S('Taxiing'), rtr=S('Rotors Turning')):
-        self.create_kpvs_within_slices(cyclic.array, slices_and(taxi.get_slices(),
-                                                                rtr.get_slices()),
-                                       max_abs_value)
-
-
-class CyclicAftDuringTaxiMax(KeyPointValueNode):
-    '''
-    Measures the maximum rearward displacement of the cyclic from the neutral point during ground taxi phase.
-    '''
-
-    can_operate = helicopter_only
-
-    units = ut.DEGREE
-
-    def derive(self, cyclic=P('Cyclic Fore-Aft'), taxi=S('Taxiing'), rtr=S('Rotors Turning')):
-        np.ma.masked_greater_equal(cyclic.array, 0)
-        self.create_kpvs_within_slices(cyclic.array, slices_and(taxi.get_slices(),
-                                                                rtr.get_slices()),
-                                       max_value)
-
-
-class CyclicForeDuringTaxiMax(KeyPointValueNode):
-    '''
-    Measures the maximum fore ward displacement of the cyclic from the neutral point during ground taxi phase.
-    '''
-
-    can_operate = helicopter_only
-
-    units = ut.DEGREE
-
-    def derive(self, cyclic=P('Cyclic Fore-Aft'), taxi=S('Taxiing'), rtr=S('Rotors Turning')):
-        np.ma.masked_less_equal(cyclic.array, 0)
-        self.create_kpvs_within_slices(cyclic.array, slices_and(taxi.get_slices(),
-                                                                rtr.get_slices()),
-                                       min_value)
+        qnh_ref = alt2press(0)
+        for app in apps:
+            index = index_at_value(alt_aal.array, 100,
+                                   slice(app.slice.stop, app.slice.start, -1),
+                                   endpoint='closing')
+            if index is None:
+                continue
+            alt_qnh_lo = alt_qnh.array[int(index)]
+            alt_viz_lo = alt_viz.array[int(index)]
+            diff = alt_qnh_lo - alt_viz_lo
+            qnh_error = qnh_ref - alt2press(diff)
+            self.create_kpv(index, qnh_error)
 
 
 ########################################
@@ -6464,7 +6347,7 @@ class AltitudeLastUnstableDuringApproachBeforeGoAround(KeyPointValueNode):
         apps = np.ma.clump_unmasked(stable.array)
         for app in apps[:-1]:
             index = index_of_last_stop(stable.array != 'Stable', app, min_dur=2)
-            if index > app.stop - 1:
+            if (index or 0) > app.stop - 1:
                 # approach ended unstable
                 # we were not stable so force altitude of 0 ft
                 self.create_kpv(app.stop - 0.5, 0)
@@ -6497,7 +6380,8 @@ class LastUnstableStateDuringLastApproach(KeyPointValueNode):
             app = apps[-1]
             index = index_of_last_stop(stable.array != 'Stable', app, min_dur=2)
             # Note: Assumed will never have an approach which is 100% Stable
-            self.create_kpv(index, stable.array.raw[index])
+            if index:
+                self.create_kpv(index, stable.array.raw[int(index)])
 
 
 class LastUnstableStateDuringApproachBeforeGoAround(KeyPointValueNode):
@@ -6522,7 +6406,8 @@ class LastUnstableStateDuringApproachBeforeGoAround(KeyPointValueNode):
         for app in apps[:-1]:
             index = index_of_last_stop(stable.array != 'Stable', app, min_dur=2)
             # Note: Assumed will never have an approach which is 100% Stable
-            self.create_kpv(index, stable.array.raw[index])
+            if index:
+                self.create_kpv(index, stable.array.raw[int(index)])
 
 
 class PercentApproachStable(KeyPointValueNode):
@@ -6614,6 +6499,7 @@ class ATDisengagedAPEngagedDuration(KeyPointValueNode):
     '''
 
     name = 'AT Disengaged AP Engaged Duration'
+    units = ut.SECOND
 
     @classmethod
     def can_operate(cls, available, ac_family=A('Family')):
@@ -6655,12 +6541,12 @@ class NumberOfAPChannelsEngagedAtTouchdown(KeyPointValueNode):
                ap_engaged=P('AP Engaged'),
                ap_ch_count=P('AP Channels Engaged'),):
 
-        if ap_ch_count and not np.ma.is_masked(ap_ch_count.array[tdwn.get_last().index]):
-            self.create_kpv(tdwn.get_last().index, ap_ch_count.array.data[tdwn.get_last().index])
-        elif ap_engaged and ap_engaged.array[tdwn.get_last().index] == 'Engaged':
-            self.create_kpv(tdwn.get_last().index, 1)
+        if ap_ch_count and not np.ma.is_masked(ap_ch_count.array[int(tdwn.get_last().index)]):
+            self.create_kpv(int(tdwn.get_last().index), ap_ch_count.array.data[int(tdwn.get_last().index)])
+        elif ap_engaged and ap_engaged.array[int(tdwn.get_last().index)] == 'Engaged':
+            self.create_kpv(int(tdwn.get_last().index), 1)
         else:
-            self.create_kpv(tdwn.get_last().index, 0)
+            self.create_kpv(int(tdwn.get_last().index), 0)
 
 
 ##############################################################################
@@ -6699,7 +6585,7 @@ class ControlColumnStiffness(KeyPointValueNode):
                     continue
                 corr, slope, off = \
                     coreg(push[move], indep_var=column[move], force_zero=True)
-                if corr > 0.85:  # This checks the data looks sound.
+                if (corr or 0) > 0.85:  # This checks the data looks sound.
                     when = np.ma.argmax(np.ma.abs(push[move]))
                     self.create_kpv(
                         (speedy.slice.start or 0) + move.start + when, slope)
@@ -6735,18 +6621,23 @@ class ControlWheelForceMax(KeyPointValueNode):
             max_abs_value)
 
 
-def PreflightCheck(self, firsts, accels, disps, full_disp):
+def preflight_check(self, apu_lasts, eng_firsts, accels, disps, full_disp):
     """
     Compute the total travel of each control during the interval between last APU start
     or first engine start and takeoff start of acceleration, as % of full travel for that control.
     """
-    for first in firsts:
-        acc = accels.get_next(first.index)
-        if acc is None or int(first.index) == int(acc.index): #avoid 0 length slice
+    if eng_firsts and apu_lasts:
+        ktis = min((eng_firsts, apu_lasts), key=lambda x: x.get_first().index)
+    else:
+        ktis = apu_lasts or eng_firsts
+
+    for kti in ktis:
+        acc = accels.get_next(kti.index)
+        if acc is None or int(kti.index) == int(acc.index): #avoid 0 length slice
             continue
-        disps = [d.array[first.index:acc.index] for d in disps]
+        disps = [d.array[slices_int(kti.index, acc.index)] for d in disps]
         ptp = max(np.ma.max(d) for d in disps) - min(np.ma.min(d) for d in disps)
-        index = np.argmax(np.ma.abs(max(disps, key=lambda d: np.ma.ptp(d)))) + first.index
+        index = np.argmax(np.ma.abs(max(disps, key=lambda d: np.ma.ptp(d)))) + kti.index
         # Mark the point where this control displacement was greatest.
         self.create_kpv(index, (ptp / full_disp) * 100.0)
 
@@ -6769,8 +6660,7 @@ class ElevatorPreflightCheck(KeyPointValueNode):
         try:
             at.get_elevator_range(model.value, series.value, family.value)
         except KeyError:
-            cls.warning("No Elevator range available for '%s', '%s', '%s'.",
-                        model.value, series.value, family.value)
+            cls.warning("No Elevator range available for '%s', '%s', '%s'.", model.value, series.value, family.value)
             return False
 
         return True
@@ -6787,7 +6677,7 @@ class ElevatorPreflightCheck(KeyPointValueNode):
         disp_range = at.get_elevator_range(model.value, series.value, family.value)
         full_disp = disp_range * 2 if isinstance(disp_range, (float, int)) else disp_range[1] - disp_range[0]
 
-        PreflightCheck(self, apu_lasts if apu_lasts else eng_firsts, accels, disps, full_disp)
+        preflight_check(self, apu_lasts, eng_firsts, accels, disps, full_disp)
 
 
 class AileronPreflightCheck(KeyPointValueNode):
@@ -6807,8 +6697,7 @@ class AileronPreflightCheck(KeyPointValueNode):
         try:
             at.get_aileron_range(model.value, series.value, family.value)
         except KeyError:
-            cls.warning("No Aileron range available for '%s', '%s', '%s'.",
-                        model.value, series.value, family.value)
+            cls.warning("No Aileron range available for '%s', '%s', '%s'.", model.value, series.value, family.value)
             return False
 
         return True
@@ -6825,7 +6714,7 @@ class AileronPreflightCheck(KeyPointValueNode):
         disp_range = at.get_aileron_range(model.value, series.value, family.value)
         full_disp = disp_range * 2 if isinstance(disp_range, (float, int)) else disp_range[1] - disp_range[0]
 
-        PreflightCheck(self, apu_lasts if apu_lasts else eng_firsts, accels, disps, full_disp)
+        preflight_check(self, apu_lasts, eng_firsts, accels, disps, full_disp)
 
 
 class RudderPreflightCheck(KeyPointValueNode):
@@ -6844,8 +6733,7 @@ class RudderPreflightCheck(KeyPointValueNode):
         try:
             at.get_rudder_range(model.value, series.value, family.value)
         except KeyError:
-            cls.warning("No Rudder range available for '%s', '%s', '%s'.",
-                        model.value, series.value, family.value)
+            cls.warning("No Rudder range available for '%s', '%s', '%s'.", model.value, series.value, family.value)
             return False
 
         return True
@@ -6859,7 +6747,7 @@ class RudderPreflightCheck(KeyPointValueNode):
         disp_range = at.get_rudder_range(model.value, series.value, family.value)
         full_disp = disp_range * 2 if isinstance(disp_range, (float, int)) else disp_range[1] - disp_range[0]
 
-        PreflightCheck(self, apu_lasts if apu_lasts else eng_firsts, accels, [disp], full_disp)
+        preflight_check(self, apu_lasts, eng_firsts, accels, [disp], full_disp)
 
 
 class FlightControlPreflightCheck(KeyPointValueNode):
@@ -6958,7 +6846,7 @@ class DistanceTravelledDuringTurnback(KeyPointValueNode):
         if toff_airport and ldg_airport and toff_airport.value.get('id') == ldg_airport.value.get('id'):
             loff = loffs.get_first()
             tdown = tdowns.get_last()
-            dist = max(integrate(gspd.array[loff.index:tdown.index + 1],
+            dist = max(integrate(gspd.array[slices_int(loff.index, tdown.index + 1)],
                                  gspd.hz, scale=1.0 / 3600.0))
             self.create_kpv(tdown.index, dist)
 
@@ -6986,7 +6874,7 @@ class DistanceTravelledFollowingDiversion(KeyPointValueNode):
         values = sorted(values, key=itemgetter(1))
         start_idx = loff.get_first().index
         stop_idx = tdwn.get_last().index
-        start_dest = dest_repair[start_idx]
+        start_dest = dest_repair[int(start_idx)]
         for dest, index in values:
             if dest == start_dest:
                 # Analysts requested only diversion if destination changes and remains changed.
@@ -6997,7 +6885,7 @@ class DistanceTravelledFollowingDiversion(KeyPointValueNode):
                     if slice_duration(run, self.frequency) <= 64: # one superframe sample
                         continue
                     end_idx = min((stop_idx, run.stop))
-                    dist = max(integrate(gspd.array[run.start:end_idx + 1],
+                    dist = max(integrate(gspd.array[slices_int(run.start, end_idx + 1)],
                                                      gspd.hz, scale=1.0 / 3600.0))
                     if dist:
                         self.create_kpv(run.start, dist)
@@ -7054,11 +6942,11 @@ class DistanceFromRotationToRunwayEnd(KeyPointValueNode):
         if ambiguous_runway(rwy):
             return
         for roll in toff_rolls:
-            rot_idx = roll.stop_edge
+            rot_idx = int(roll.stop_edge)
             rot_end = runway_distance_from_end(rwy.value,
                                                lat.array[rot_idx],
                                                lon.array[rot_idx])
-            self.create_kpv(rot_idx, rot_end)
+            self.create_kpv(roll.stop_edge, rot_end)
 
 
 class DecelerationToAbortTakeoffAtRotation(KeyPointValueNode):
@@ -7086,10 +6974,11 @@ class DecelerationToAbortTakeoffAtRotation(KeyPointValueNode):
         for roll in toff_rolls:
             rot_idx = roll.stop_edge
             rot_end = runway_distance_from_end(rwy.value,
-                                               lat.array[rot_idx],
-                                               lon.array[rot_idx])
-            if rot_end:
-                lift_speed = ut.convert(value_at_index(speed, rot_idx), ut.KT, ut.METER_S)
+                                               lat.array[int(rot_idx)],
+                                               lon.array[int(rot_idx)])
+            speed_value = value_at_index(speed, rot_idx)
+            if rot_end and speed_value:
+                lift_speed = ut.convert(speed_value, ut.KT, ut.METER_S)
                 mu = (lift_speed**2.0) / (2.0 * GRAVITY_METRIC * rot_end)
                 self.create_kpv(rot_idx, mu)
 
@@ -7187,6 +7076,9 @@ class DistanceFromRunwayStartToTouchdown(KeyPointValueNode):
         distance_to_tdn = runway_distance_from_end(rwy.value,
                                                    lat_tdn.get_last().value,
                                                    lon_tdn.get_last().value)
+        if not distance_to_tdn:
+            # Problem with recorded position data
+            return
         distance_start_tdn = distance_to_start - distance_to_tdn
         if distance_start_tdn > -500:
             # sanity check asumes landed on runway, allows for touching down on stopway
@@ -7274,7 +7166,7 @@ class DecelerationFromTouchdownToStopOnRunway(KeyPointValueNode):
                                              lat_tdn.get_last().value,
                                              lon_tdn.get_last().value)
                 kts = value_at_index(repair_mask(gspd.array), index)
-                if not kts:
+                if not kts or not distance_at_tdn:
                     return
                 speed = ut.convert(kts, ut.KT, ut.METER_S)
                 mu = (speed * speed) / (2.0 * GRAVITY_METRIC * (distance_at_tdn))
@@ -7422,7 +7314,7 @@ class RunwayOverrunWithoutSlowingDuration(KeyPointValueNode):
             if not last_turnoff or not is_index_within_slice(last_turnoff.index, landing.slice):
                 continue
             # So the period of interest is...
-            land_roll = slice(last_tdwn.index, last_turnoff.index)
+            land_roll = slices_int(last_tdwn.index, last_turnoff.index)
             # So for captured ILS approaches or aircraft with precision location we can compute the deceleration required.
             if precise.value or ils_approach:
                 speed = gspd.array[land_roll] * scale
@@ -7473,8 +7365,8 @@ class DistanceOnLandingFrom60KtToRunwayEnd(KeyPointValueNode):
         if idx_60 and rwy.value and 'start' in rwy.value:
             # Only work out the distance if we have a reading at 60kts...
             distance = runway_distance_from_end(rwy.value,
-                                                lat.array[idx_60],
-                                                lon.array[idx_60])
+                                                lat.array[int(idx_60)],
+                                                lon.array[int(idx_60)])
             self.create_kpv(idx_60, distance)  # Metres
 
 
@@ -7512,7 +7404,7 @@ class HeadingDuringTakeoff(KeyPointValueNode):
                 # -1.42108547152020037174224853515625E-14 == 360.0
                 # which is an invalid value for Heading
                 if not np.ma.is_masked(value):
-                    self.create_kpv(index, float(np.round(value.data, 8)) % 360.0)
+                    self.create_kpv(index, np.round(float(value), 8) % 360.0)
 
 
 class HeadingTrueDuringTakeoff(KeyPointValueNode):
@@ -7554,7 +7446,7 @@ class HeadingTrueDuringTakeoff(KeyPointValueNode):
                 # -1.42108547152020037174224853515625E-14 == 360.0
                 # which is an invalid value for Heading
                 if not np.ma.is_masked(value):
-                    self.create_kpv(index, float(np.round(value.data, 8)) % 360.0)
+                    self.create_kpv(index, np.round(float(value), 8) % 360.0)
 
 
 class HeadingDuringLanding(KeyPointValueNode):
@@ -7585,12 +7477,12 @@ class HeadingDuringLanding(KeyPointValueNode):
             stop = turn_off.index + 1 if turn_off else landing.slice.stop
             if start and stop:
                 index = (start + stop) / 2.0
-                value = np.ma.median(hdg.array[start:stop])
+                value = np.ma.median(hdg.array[slices_int(start, stop)])
                 # median result is rounded as
                 # -1.42108547152020037174224853515625E-14 == 360.0
                 # which is an invalid value for Heading
                 if not np.ma.is_masked(value):
-                    self.create_kpv(index, float(np.round(value.data, 8)) % 360.0)
+                    self.create_kpv(index, np.round(float(value), 8) % 360.0)
 
 
 
@@ -7633,7 +7525,7 @@ class HeadingTrueDuringLanding(KeyPointValueNode):
                 # -1.42108547152020037174224853515625E-14 == 360.0
                 # which is an invalid value for Heading
                 if not np.ma.is_masked(value):
-                    self.create_kpv(index, float(np.round(value.data, 8)) % 360.0)
+                    self.create_kpv(index, np.round(float(value), 8) % 360.0)
 
 
 class HeadingAtLowestAltitudeDuringApproach(KeyPointValueNode):
@@ -7708,6 +7600,8 @@ class HeightLossLiftoffTo35Ft(KeyPointValueNode):
                alt_aal=P('Altitude AAL For Flight Phases')):
 
         for climb in alt_aal.slices_from_to(0, 35):
+            if climb.start == climb.stop:
+                continue
             array = np.ma.masked_greater_equal(vs.array[climb], 0.0)
             drops = np.ma.clump_unmasked(array)
             for drop in drops:
@@ -8014,7 +7908,7 @@ class ILSGlideslopeDeviation500To200FtMax(KeyPointValueNode):
 
 class ILSGlideslopeNotEstablishedHighestAltitude1000To200Ft(KeyPointValueNode):
     '''
-    Determine the highest altittude where the ILS glideslope first deviates (>0.5 dots or <-0.5 dots)
+    Determine the highest altitude where the ILS glideslope first deviates (>0.5 dots or <-0.5 dots)
     within the altitude band 1000 to 200 ft
     '''
 
@@ -8065,7 +7959,7 @@ class ILSGlideslopeNotEstablishedHighestAltitude1000To200Ft(KeyPointValueNode):
 
 class ILSGlideslopeNotEstablishedHighestAltitude500To200Ft(KeyPointValueNode):
     '''
-    Determine the highest altittude where the ILS glideslope first deviates (>0.5 dots or <-0.5 dots)
+    Determine the highest altitude where the ILS glideslope first deviates (>0.5 dots or <-0.5 dots)
     within the altitude band 500 to 200 ft
     '''
 
@@ -8116,7 +8010,7 @@ class ILSGlideslopeNotEstablishedHighestAltitude500To200Ft(KeyPointValueNode):
 
 class ILSLocalizerNotEstablishedHighestAltitude1000To200Ft(KeyPointValueNode):
     '''
-    Determine the highest altittude where the ILS localizer first deviates (>0.5 dots or <-0.5 dots)
+    Determine the highest altitude where the ILS localizer first deviates (>0.5 dots or <-0.5 dots)
     within the altitude band 1000 to 200 ft
     '''
 
@@ -8165,7 +8059,7 @@ class ILSLocalizerNotEstablishedHighestAltitude1000To200Ft(KeyPointValueNode):
 
 class ILSLocalizerNotEstablishedHighestAltitude500To200Ft(KeyPointValueNode):
     '''
-    Determine the highest altittude where the ILS localizer first deviates (>0.5 dots or <-0.5 dots)
+    Determine the highest altitude where the ILS localizer first deviates (>0.5 dots or <-0.5 dots)
     within the altitude band 500 to 200 ft
     '''
 
@@ -8562,7 +8456,7 @@ class LatitudeAtTouchdown(KeyPointValueNode):
         accurate positional data the touchdown point can be computed more
         accurately.
 
-        Note: Cannot use smoothed position as this causes circular dependancy.
+        Note: Cannot use smoothed position as this causes circular dependency.
         '''
         return 'Touchdown' in available and any_of(('Latitude',
                                                     'Latitude (Coarse)',
@@ -9025,7 +8919,7 @@ class LatitudeAtLowestAltitudeDuringApproach(KeyPointValueNode):
                lat=P('Latitude Prepared'),
                low_points=KTI('Lowest Altitude During Approach')):
         '''
-        Note: Cannot use smoothed position as this causes circular dependancy.
+        Note: Cannot use smoothed position as this causes circular dependency.
         '''
         self.create_kpvs_at_ktis(lat.array, low_points)
 
@@ -9041,7 +8935,7 @@ class LongitudeAtLowestAltitudeDuringApproach(KeyPointValueNode):
                lon=P('Longitude Prepared'),
                low_points=KTI('Lowest Altitude During Approach')):
         '''
-        Note: Cannot use smoothed position as this causes circular dependancy.
+        Note: Cannot use smoothed position as this causes circular dependency.
         '''
         self.create_kpvs_at_ktis(lon.array, low_points)
 
@@ -9080,8 +8974,8 @@ class MachDuringCruiseAvg(KeyPointValueNode):
                cruises=S('Cruise')):
 
         for _slice in cruises.get_slices():
-            self.create_kpv(_slice.start + (_slice.stop - _slice.start) / 2,
-                            np.ma.mean(mach.array[_slice]))
+            self.create_kpv(_slice.start + (_slice.stop - _slice.start) // 2,
+                            np.ma.mean(mach.array[slices_int(_slice)]))
 
 
 class MachAboveFL200Max(KeyPointValueNode):
@@ -9693,34 +9587,6 @@ class EngTorqueLimitExceedanceWithOneEngineInoperativeDuration(KeyPointValueNode
                 self.create_kpvs_from_slice_durations(phase_slices, self.frequency)
 
 
-class EngTorqueExceeding100Percent(KeyPointValueNode):
-    '''
-    Measures the duration of Eng (*) Torque Avg exceeding 100.
-    '''
-
-    units = ut.SECOND
-    can_operate = helicopter_only
-
-    def derive(self, avg_torque = P('Eng (*) Torque Avg')):
-        threshold_slices = slices_above(avg_torque.array, 100)[1]
-        threshold_slices = slices_remove_small_slices(threshold_slices, 2, avg_torque.hz)
-        self.create_kpvs_from_slice_durations(threshold_slices, self.frequency)
-
-
-class EngTorqueExceeding110Percent(KeyPointValueNode):
-    '''
-    Measures the duration of Eng (*) Torque Avg exceeding 110.
-    '''
-
-    units = ut.SECOND
-    can_operate = helicopter_only
-
-    def derive(self, avg_torque = P('Eng (*) Torque Avg')):
-        threshold_slices = slices_above(avg_torque.array, 110)[1]
-        threshold_slices = slices_remove_small_slices(threshold_slices, 2, avg_torque.hz)
-        self.create_kpvs_from_slice_durations(threshold_slices, self.frequency)
-
-
 ##############################################################################
 # Engine Bleed
 
@@ -10145,7 +10011,7 @@ class EngEPRAtTOGADuringTakeoffMax(KeyPointValueNode):
                                              change='entering', phase=takeoff)
         for index in indexes:
             # Measure at known state instead of interpolated transition
-            index = ceil(index)
+            index = int(ceil(index))
             value = value_at_index(eng_epr_max.array, index)
             self.create_kpv(index, value)
 
@@ -10172,7 +10038,7 @@ class EngTPRAtTOGADuringTakeoffMin(KeyPointValueNode):
                                              change='entering', phase=takeoff)
         for index in indexes:
             # Measure at known state instead of interpolated transition
-            index = ceil(index)
+            index = int(ceil(index))
             value = value_at_index(eng_tpr_min.array, index)
             self.create_kpv(index, value)
 
@@ -10498,7 +10364,7 @@ class EngGasTempMaxDuringTakeoffMaxMaintained(KeyPointValueNode):
 
         for samples, duration in zip(seconds, self.NAME_VALUES['durations']):
             for takeoff in t_slices:
-                arrays = eng_egt_max.array[takeoff]
+                arrays = eng_egt_max.array[slices_int(takeoff)]
                 if len(arrays) > 0:
                     index, value = max_maintained_value(arrays, samples, hz, takeoff)
                     if index is not None and value is not None:
@@ -10624,7 +10490,7 @@ class EngGasTempDuringEngStartForXSecMax(KeyPointValueNode):
         fto_idx = toff_turn_rwy.get_first().index
 
         # Mask out sections with N2 > 60%, i.e. all engines running:
-        n2_data = eng_n2_min.array[0:fto_idx]
+        n2_data = eng_n2_min.array[slices_int(0, fto_idx)]
         n2_data[n2_data > 60.0] = np.ma.masked
 
         # Engines are already running at start of data:
@@ -11097,11 +10963,9 @@ class EngN1For5Sec500To50FtMin(KeyPointValueNode):
                alt_aal=P('Altitude AAL For Flight Phases'),
                duration=A('HDF Duration')):
 
-        hdf_duration = duration.value * self.frequency if duration else None
-
         for alt_slice in alt_aal.slices_from_to(500, 50):
             array = eng_n1_min_param.array[alt_slice]
-            samples = 5 * eng_n1_min_param.frequency
+            samples = int(5 * eng_n1_min_param.frequency)
             if len(array) <= samples:
                 continue
 
@@ -11115,7 +10979,7 @@ class EngN1For5Sec500To50FtMin(KeyPointValueNode):
             # The index of the maximum value of the max_difference array will also be
             # the index of the sliding window containing the most minimum values for this array
             start_slice_index = index_at_value(max_difference, max_difference.max())
-            index, value = max_value(array.max() - sliding_window[start_slice_index])
+            index, value = max_value(array.max() - sliding_window[int(start_slice_index)])
 
             if index is not None:
                 self.create_kpv(start_slice_index + index + alt_slice.start, value)
@@ -11178,6 +11042,55 @@ class EngN1WithThrustReversersDeployedMax(KeyPointValueNode):
         slices = [s.slice for s in landings]
         slices = clump_multistate(tr.array, 'Deployed', slices)
         self.create_kpv_from_slices(eng_n1_avg.array, slices, max_value)
+
+
+class EngEngStartToN1At60PercentDuration(KeyPointValueNode):
+    '''
+    Duration for engine start to first application of takeoff power,
+    (at least 60%)
+    '''
+    NAME_FORMAT = 'Eng (%(number)d) Eng Start To N1 At 60 Percent Duration'
+    NAME_VALUES = {'number': [1, 2, 3, 4]}
+    units = ut.SECOND
+
+    @classmethod
+    def can_operate(cls, available):
+        eng = any_of(('Eng (1) N1', 'Eng (2) N1', 'Eng (3) N1', 'Eng (4) N1'),
+                     available)
+        engstart = 'Eng Start' in available
+        liftoff = 'Liftoff' in available
+        return eng and engstart and liftoff
+
+    def derive(self,
+               eng1=P('Eng (1) N1'),
+               eng2=P('Eng (2) N1'),
+               eng3=P('Eng (3) N1'),
+               eng4=P('Eng (4) N1'),
+               engstarts=KTI('Eng Start'),
+               liftoffs=KTI('Liftoff')):
+        if not liftoffs or not engstarts:
+            return
+        for eng_num, eng in enumerate((eng1, eng2, eng3, eng4), start=1):
+            if not eng:
+                continue
+            eng_start_name = engstarts.format_name(number=eng_num)
+            eng_number_starts = engstarts.get(name=eng_start_name)
+            if not eng_number_starts:
+                continue
+            n1_repaired = repair_mask(eng.array,
+                                      frequency=eng.frequency,
+                                      repair_duration=30,
+                                      extrapolate=True)
+            n1 = np.ma.masked_greater(n1_repaired, 60.0)
+            n1_slices = slices_and(
+                [slice(eng_number_starts.get_first().index,
+                       liftoffs.get_first().index), ],
+                np.ma.clump_unmasked(n1)
+            )
+            if n1_slices:
+                self.create_kpvs_from_slice_durations(
+                    [n1_slices[0], ], self.frequency, number=eng_num
+                )
 
 
 # NOTE: Was named 'Eng N1 Cooldown Duration'.
@@ -11263,7 +11176,7 @@ class EngN1AtTOGADuringTakeoff(KeyPointValueNode):
         indexes = find_edges_on_state_change('TOGA', toga.array, change='entering', phase=takeoff)
         for index in indexes:
             # Measure at known state instead of interpolated transition
-            index = ceil(index)
+            index = int(ceil(index))
             value = value_at_index(eng_n1.array, index)
             self.create_kpv(index, value)
 
@@ -11478,24 +11391,6 @@ class EngN2DuringMaximumContinuousPowerMax(KeyPointValueNode):
         self.create_kpvs_within_slices(eng_n2_max.array, mcp, max_value)
 
 
-class EngN2DuringMaximumContinuousPowerMin(KeyPointValueNode):
-    '''
-    Minimum N2 recorded during maximum continuous power.
-
-    Maximum continuous power applies whenever takeoff or go-around
-    power settings are not in force.
-    '''
-
-    name = 'Eng N2 During Maximum Continuous Power Min'
-    units = ut.PERCENT
-
-    can_operate = helicopter_only
-
-    def derive(self,
-               eng_n2_min=P('Eng (*) N2 Min'),
-               mcp=S('Maximum Continuous Power')):
-
-        self.create_kpvs_within_slices(eng_n2_min.array, mcp, min_value)
 
 
 class EngN2For5SecDuringMaximumContinuousPowerMax(KeyPointValueNode):
@@ -11906,8 +11801,8 @@ class ThrottleReductionToTouchdownDuration(KeyPointValueNode):
             for touchdown in touchdowns.get(within_slice=landing.slice):
                 # Seek the throttle reduction before thrust reverse is applied:
                 scope = slice(landing.slice.start - delta, landing.slice.stop)
-                dn1 = rate_of_change_array(eng_n1.array[scope], eng_n1.hz)
-                dtla = rate_of_change_array(tla.array[scope], tla.hz)
+                dn1 = rate_of_change_array(eng_n1.array[slices_int(scope)], eng_n1.hz)
+                dtla = rate_of_change_array(tla.array[slices_int(scope)], tla.hz)
                 peak_decel = np.ma.argmax(dn1 * dtla)
                 reduced_scope = slice(scope.start, scope.start + peak_decel)
                 # Now see where the power is reduced:
@@ -12215,24 +12110,6 @@ class EngTorqueDuringTaxiMax(KeyPointValueNode):
         self.create_kpv_from_slices(eng_trq_max.array, taxiing, max_value)
 
 
-class EngTorqueWithOneEngineInoperativeMax(KeyPointValueNode):
-    '''
-    Maximum engine torque recorded with one engine inoperative.
-    '''
-
-    units = ut.PERCENT
-
-    can_operate = helicopter_only
-
-    def derive(self,
-               eng_trq_max=P('Eng (*) Torque Max'),
-               airborne=S('Airborne'),
-               one_eng=M('One Engine Inoperative')):
-
-        phases = slices_and(runs_of_ones(one_eng.array == 'OEI'), airborne.get_slices())
-        self.create_kpvs_within_slices(eng_trq_max.array, phases, max_value)
-
-
 class EngTorqueDuringTakeoff5MinRatingMax(KeyPointValueNode):
     '''
     Maximum engine torque recorded between the start of takeoff
@@ -12381,55 +12258,6 @@ class EngTorqueFor5SecDuringMaximumContinuousPowerMax(KeyPointValueNode):
         self.create_kpvs_within_slices(array, ratings, max_value)
 
 
-class EngTorqueAbove90KtsMax(KeyPointValueNode):
-    '''
-    Maximum engine torque where the indicate airspeed is above 90 kts. (helicopter only)
-
-    Some Helicopters have Torque restictions above 90 kts to limit flight control loads
-    at high speed thereby preserving dynamic component replacement times.
-
-    '''
-
-    name = 'Eng Torque Above 90 Kts Max'
-
-    units = ut.PERCENT
-
-    can_operate = helicopter_only
-
-    def derive(self, eng=P('Eng (*) Torque Max'), air_spd=P('Airspeed')):
-        slices_no_gaps = slices_remove_small_gaps(air_spd.slices_above(90), time_limit=10, hz=air_spd.hz)
-
-        self.create_kpvs_within_slices(
-            eng.array,
-            slices_no_gaps,
-            max_value
-            )
-
-
-class EngTorqueAbove100KtsMax(KeyPointValueNode):
-    '''
-    Maximum engine torque where the indicate airspeed is above 100 kts. (helicopter only)
-
-    Some Helicopters have Torque restictions above 100 kts to limit flight control loads
-    at high speed thereby preserving dynamic component replacement times.
-    (taken from S92 type certificate)
-    '''
-
-    name = 'Eng Torque Above 100 Kts Max'
-
-    units = ut.PERCENT
-
-    can_operate = helicopter_only
-
-    def derive(self, eng=P('Eng (*) Torque Max'), air_spd=P('Airspeed')):
-        self.create_kpvs_within_slices(
-            eng.array,
-            air_spd.slices_above(100),
-            max_value
-        )
-
-
-
 class EngTorque500To50FtMax(KeyPointValueNode):
     '''
     Maximum engine torque between 500ft and 50ft AAL.
@@ -12535,6 +12363,10 @@ class TorqueAsymmetryWhileAirborneMax(KeyPointValueNode):
     '''
 
     units = ut.PERCENT
+
+    @classmethod
+    def can_operate(cls, available):
+        return all_of(('Torque Asymmetry', 'Airborne'), available)
 
     def derive(self, torq_asym=P('Torque Asymmetry'), airborne=S('Airborne')):
         self.create_kpvs_within_slices(torq_asym.array, airborne.get_slices(), max_value)
@@ -12843,7 +12675,7 @@ class EngStartTimeMax(KeyPointValueNode):
                 # Then find when the differential first drops below zero
                 startup_count = index_at_value(np.ediff1d(array[begin:]), 0.0)
                 # Check it's sensible
-                if begin > 0 and array[begin + startup_count] > 50.0:
+                if begin > 0 and array[int(begin + startup_count)] > 50.0:
                     return begin, startup_count / hz
                 else:
                     return None, None
@@ -12854,19 +12686,20 @@ class EngStartTimeMax(KeyPointValueNode):
 
         for taxi in taxi_out.get_slices():
 
-            eng_1_index, eng_1_time = start_time(eng1_n2.array[:taxi.stop], hz)
-            eng_2_index, eng_2_time = start_time(eng2_n2.array[:taxi.stop], hz)
+            eng_1_index, eng_1_time = start_time(eng1_n2.array[slices_int(taxi.stop)], hz)
+            eng_2_index, eng_2_time = start_time(eng2_n2.array[slices_int(taxi.stop)], hz)
 
             '''
-            print (eng_1_index, eng_1_time)
-            print (eng_2_index, eng_2_time )
+            print(eng_1_index, eng_1_time)
+            print(eng_2_index, eng_2_time)
             import matplotlib.pyplot as plt
             plt.plot(eng1_n2.array[:taxi.stop])
             plt.plot(eng2_n2.array[:taxi.stop])
             plt.show()
             '''
 
-            if eng_1_time > eng_2_time:
+            if eng_1_time and eng_2_time and eng_1_time > eng_2_time or \
+               eng_1_time and not eng_2_time:
                 self.create_kpv(eng_1_index, eng_1_time)
             elif eng_2_time:
                 self.create_kpv(eng_2_index, eng_2_time)
@@ -12909,136 +12742,6 @@ class SingleEngineDuringTaxiOutDuration(KeyPointValueNode):
         self.create_kpvs_where(some_running == 1, all_run.hz, phase=taxi)
 
 
-##############################################################################
-# Gearbox Oil
-
-class MGBOilTempMax(KeyPointValueNode):
-    '''
-    Find the Max temperature for the main gearbox oil.
-    '''
-    units = ut.CELSIUS
-    name = 'MGB Oil Temp Max'
-
-    @classmethod
-    def can_operate(cls, available, ac_type=A('Aircraft Type')):
-        aircraft = ac_type == helicopter
-        gearbox = any_of(('MGB Oil Temp', 'MGB (Fwd) Oil Temp',
-                          'MGB (Aft) Oil Temp'), available)
-        airborne = 'Airborne' in available
-        return aircraft and gearbox and airborne
-
-    def derive(self, mgb=P('MGB Oil Temp'), mgb_fwd=P('MGB (Fwd) Oil Temp'),
-               mgb_aft=P('MGB (Aft) Oil Temp'), airborne=S('Airborne')):
-        gearboxes = vstack_params(mgb, mgb_fwd, mgb_aft)
-        gearbox = np.ma.max(gearboxes, axis=0)
-        self.create_kpvs_within_slices(gearbox, airborne, max_value)
-
-
-class MGBOilPressMax(KeyPointValueNode):
-    '''
-    Find the Maximum main gearbox oil pressure.
-    '''
-    units = ut.PSI
-    name = 'MGB Oil Press Max'
-
-    @classmethod
-    def can_operate(cls, available, ac_type=A('Aircraft Type')):
-        aircraft = ac_type == helicopter
-        gearbox = any_of(('MGB Oil Press', 'MGB (Fwd) Oil Press',
-                          'MGB (Aft) Oil Press'), available)
-        airborne = 'Airborne' in available
-        return aircraft and gearbox and airborne
-
-    def derive(self, mgb=P('MGB Oil Press'), mgb_fwd=P('MGB (Fwd) Oil Press'),
-               mgb_aft=P('MGB (Aft) Oil Press'), airborne=S('Airborne')):
-        gearboxes = vstack_params(mgb, mgb_fwd, mgb_aft)
-        gearbox = np.ma.max(gearboxes, axis=0)
-        self.create_kpvs_within_slices(gearbox, airborne, max_value)
-
-
-class MGBOilPressMin(KeyPointValueNode):
-    '''
-    Find the Minimum main gearbox oil pressure.
-    '''
-    units = ut.PSI
-    name = 'MGB Oil Press Min'
-
-    @classmethod
-    def can_operate(cls, available, ac_type=A('Aircraft Type')):
-        aircraft = ac_type == helicopter
-        gearbox = any_of(('MGB Oil Press', 'MGB (Fwd) Oil Press',
-                          'MGB (Aft) Oil Press'), available)
-        airborne = 'Airborne' in available
-        return aircraft and gearbox and airborne
-
-    def derive(self, mgb=P('MGB Oil Press'), mgb_fwd=P('MGB (Fwd) Oil Press'),
-               mgb_aft=P('MGB (Aft) Oil Press'), airborne=S('Airborne')):
-        gearboxes = vstack_params(mgb, mgb_fwd, mgb_aft)
-        gearbox = np.ma.min(gearboxes, axis=0)
-        self.create_kpvs_within_slices(gearbox, airborne, min_value)
-
-
-class MGBOilPressLowDuration(KeyPointValueNode):
-    '''
-    Duration of the gearbox oil pressure low warning.
-    '''
-    units = ut.SECOND
-    name = 'MGB Oil Press Low Duration'
-
-    @classmethod
-    def can_operate(cls, available, ac_type=A('Aircraft Type')):
-        aircraft = ac_type == helicopter
-        gearbox = any_of(('MGB Oil Press Low', 'MGB Oil Press Low (1)',
-                          'MGB Oil Press Low (2)'), available)
-        airborne = 'Airborne' in available
-        return aircraft and gearbox and airborne
-
-    def derive(self, mgb=M('MGB Oil Press Low'),
-               mgb1=M('MGB Oil Press Low (1)'),
-               mgb2=M('MGB Oil Press Low (2)'),
-               airborne=S('Airborne')):
-        hz = (mgb or mgb1 or mgb2).hz
-        gearbox = vstack_params_where_state((mgb, 'Low Press'),
-                                            (mgb1, 'Low Press'),
-                                            (mgb2, 'Low Press'))
-        self.create_kpvs_where(gearbox.any(axis=0), hz, phase=airborne)
-
-
-class CGBOilTempMax(KeyPointValueNode):
-    '''
-    Find the Max temperature for the combining gearbox oil.
-    '''
-    units = ut.CELSIUS
-    name = 'CGB Oil Temp Max'
-    can_operate = helicopter_only
-
-    def derive(self, cgb=P('CGB Oil Temp'), airborne=S('Airborne')):
-        self.create_kpvs_within_slices(cgb.array, airborne, max_value)
-
-
-class CGBOilPressMax(KeyPointValueNode):
-    '''
-    Find the Maximum combining gearbox oil pressure.
-    '''
-    units = ut.PSI
-    name = 'CGB Oil Press Max'
-    can_operate = helicopter_only
-
-    def derive(self, cgb=P('CGB Oil Press'), airborne=S('Airborne')):
-        self.create_kpvs_within_slices(cgb.array, airborne, max_value)
-
-
-class CGBOilPressMin(KeyPointValueNode):
-    '''
-    Find the Minimum combining gearbox oil pressure.
-    '''
-    units = ut.PSI
-    name = 'CGB Oil Press Min'
-    can_operate = helicopter_only
-
-    def derive(self, cgb=P('CGB Oil Press'), airborne=S('Airborne')):
-        self.create_kpvs_within_slices(cgb.array, airborne, min_value)
-
 
 ##############################################################################
 class EventMarkerPressed(KeyPointValueNode):
@@ -13067,6 +12770,8 @@ class HeightOfBouncedLanding(KeyPointValueNode):
     Bounced landing phase is established by looking for the maximum height
     after touching the ground while still going fast.
     '''
+
+    can_operate = aeroplane_only
 
     units = ut.FT
 
@@ -13132,16 +12837,16 @@ class HeadingVariationAbove80KtsAirspeedDuringTakeoff(KeyPointValueNode):
                     airspeed.name, toffs.name, toff.slice)
                 continue
             spd = np.ma.masked_less(airspeed.array, 60)
-            first_spd_idx = first_valid_sample(spd[toff.slice.start:ceil(begin) + 1])[0] + toff.slice.start
+            first_spd_idx = first_valid_sample(spd[toff.slice.start:int(ceil(begin) + 1)])[0] + toff.slice.start
             # Pick first heading parameter with valid data in phase.
-            head = first_valid_parameter(head_true, head_mag, phases=(slice(first_spd_idx, ceil(begin)),))
+            head = first_valid_parameter(head_true, head_mag, phases=[slice(first_spd_idx, int(ceil(begin)))])
             if head is None:
                 # We have no valid heading to use.
                 self.warning(
                     "No valid heading data identified in takeoff slice '%s'.",
                     toff.slice)
                 continue
-            datum_heading = np.ma.median(head.array[first_spd_idx:ceil(begin)])
+            datum_heading = np.ma.median(head.array[first_spd_idx:int(ceil(begin))])
 
             end = None
             if nosewheel:
@@ -13154,7 +12859,7 @@ class HeadingVariationAbove80KtsAirspeedDuringTakeoff(KeyPointValueNode):
                     toff.slice)
                 continue
 
-            scan = slice(ceil(begin), ceil(end))
+            scan = slice(int(ceil(begin)), int(ceil(end)))
             # The data to test is extended to include aligned endpoints for the
             # 80kt and 1.5deg conditions. This also reduces the computational load as
             # we don't have to work out the deviation from the takeoff runway for all the flight.
@@ -13204,7 +12909,7 @@ class HeadingDeviationFromRunwayAtTOGADuringTakeoff(KeyPointValueNode):
         indexes = find_edges_on_state_change('TOGA', toga.array, phase=takeoff)
         for index in indexes:
             # Measure at known state instead of interpolated transition
-            index = ceil(index)
+            index = int(ceil(index))
             brg = value_at_index(head.array, index)
             if brg in (None, np.ma.masked):
                 self.warning("Heading True Continuous is masked at index '%s'", index)
@@ -13264,62 +12969,6 @@ class HeadingDeviationFromRunwayDuringLandingRoll(KeyPointValueNode):
         final_landing = land_rolls[-1].slice
         dev = runway_deviation(head.array, rwy.value)
         self.create_kpv_from_slices(dev, [final_landing], max_abs_value)
-
-
-class HeadingVariation1_5NMTo1_0NMFromOffshoreTouchdownMaxStandardApproach(KeyPointValueNode):
-    '''
-    Maximum heading variation (PTP) 1.5 to 1.0 NM from touchdown. (helicopter only)
-    '''
-
-    units = ut.DEGREE
-
-    name = 'Heading Variation 1.5 NM To 1.0 NM From Offshore Touchdown Max Standard Approach'
-
-    can_operate = helicopter_only
-
-    def derive(self, heading=P('Heading Continuous'),
-               dtts=KTI('Distance To Touchdown'),
-               offshore_twn=KTI('Offshore Touchdown'),
-               approaches=App('Approach Information')):
-
-        for approach in approaches:
-            if approach.type in ['APPROACH', 'LANDING', 'GO_AROUND', 'TOUCH_AND_GO', 'RIG']:
-                for tdwn in offshore_twn:
-                    if is_index_within_slice(tdwn.index, slice(approach.slice.start, approach.slice.stop+10)):
-                        start_kti = dtts.get_previous(tdwn.index, name='1.5 NM To Touchdown')
-                        stop_kti = dtts.get_previous(tdwn.index, name='1.0 NM To Touchdown')
-                        if start_kti and stop_kti:
-                            phase = slice(start_kti.index, stop_kti.index+1)
-                            heading_delta = np.ma.ptp(heading.array[phase])
-                            self.create_kpv(phase.stop-1, heading_delta)
-
-
-class HeadingVariation1_5NMTo1_0NMFromOffshoreTouchdownMaxSpecialProcedure(KeyPointValueNode):
-    '''
-    Maximum heading variation (PTP) 1.5 to 1.0 NM from touchdown. (helicopter only)
-    '''
-
-    units = ut.DEGREE
-
-    name = 'Heading Variation 1.5 NM To 1.0 NM From Offshore Touchdown Max Special Procedure'
-
-    can_operate = helicopter_only
-
-    def derive(self, heading=P('Heading Continuous'),
-               dtts=KTI('Distance To Touchdown'),
-               offshore_twn=KTI('Offshore Touchdown'),
-               approaches=App('Approach Information')):
-
-        for approach in approaches:
-            if approach.type in ['SHUTTLING', 'AIRBORNE_RADAR']:
-                for tdwn in offshore_twn:
-                    if is_index_within_slice(tdwn.index, slice(approach.slice.start, approach.slice.stop+10)):
-                        start_kti = dtts.get_previous(tdwn.index, name='1.5 NM To Touchdown')
-                        stop_kti = dtts.get_previous(tdwn.index, name='1.0 NM To Touchdown')
-                        if start_kti and stop_kti:
-                            phase = slice(start_kti.index, stop_kti.index+1)
-                            heading_delta = np.ma.ptp(heading.array[phase])
-                            self.create_kpv(phase.stop-1, heading_delta)
 
 
 class HeadingVariation300To50Ft(KeyPointValueNode):
@@ -13414,11 +13063,15 @@ class HeadingVariationAbove100KtsAirspeedDuringLanding(KeyPointValueNode):
         for land in lands:
             begin = index_at_value(alt.array, 1.0, _slice=land.slice)
             end = index_at_value(airspeed.array, 100.0, _slice=land.slice)
-            if begin is None or begin > end:
+
+            if begin is None or end is None:
+                continue
+
+            if begin > end:
                 # Corrupt landing slices or landed below 100kts. Can happen!
                 break
             else:
-                head_dev = np.ma.ptp(head.array[begin:end + 1])
+                head_dev = np.ma.ptp(head.array[slices_int(begin, end + 1)])
                 self.create_kpv((begin + end) / 2, head_dev)
 
 
@@ -13452,7 +13105,7 @@ class HeadingVariationTouchdownPlus4SecTo60KtsAirspeed(KeyPointValueNode):
             end = index_at_value(airspeed.array, 60.0, slice(begin, None), endpoint='nearest')
             if end:
                 # We have a meaningful slice to examine.
-                to_scan = head.array[begin:end + 1]
+                to_scan = head.array[slices_int(begin, end + 1)]
                 if not np.ma.count(to_scan):
                     continue
                 # Correct for rounding down of array index at first data point.
@@ -13494,7 +13147,7 @@ class HeadingVacatingRunway(KeyPointValueNode):
             # heading change. The KTI is at the point of turnoff at which
             # moment the heading change can be very small.
             index = min(off_rwy.index + 5, len(head.array) - 1)
-            value = head.array[index] % 360.0
+            value = head.array[int(index)] % 360.0
             self.create_kpv(index, value)
 
 
@@ -13507,28 +13160,6 @@ class HeadingRateWhileAirborneMax(KeyPointValueNode):
 
     def derive(self, heading_rate=P('Heading Rate'), airborne=P('Airborne')):
         self.create_kpvs_within_slices(heading_rate.array, airborne.get_slices(), max_abs_value)
-
-
-class TrackVariation100To50Ft(KeyPointValueNode):
-    '''
-    Checking the variation in track angle during the latter stages of the descent.
-    Helicopter only. Uses Altitude AGL.
-    '''
-
-    name = 'Track Variation 100 To 50 Ft'
-    units = ut.DEGREE_S
-
-    can_operate = helicopter_only
-
-    def derive(self, track=P('Track'),
-               alt_agl=P('Altitude AGL')):
-
-        # The threshold applied here ensures that the altitude passes through this range and does not
-        # just dip into the range, as might happen for a light aircraft or helicopter flying at 100ft.
-        for band in alt_agl.slices_from_to(100, 50, threshold=1.0):
-            dev = np.ma.ptp(track.array[band])
-            self.create_kpv(band.stop, dev)
-
 
 
 ##############################################################################
@@ -13554,7 +13185,7 @@ class HeightMinsToTouchdown(KeyPointValueNode):
         for mtt in mtt_kti:
             # XXX: Assumes that the number will be the first part of the name:
             time = int(mtt.name.split(' ')[0])
-            self.create_kpv(mtt.index, alt_aal.array[mtt.index], time=time)
+            self.create_kpv(mtt.index, alt_aal.array[int(mtt.index)], time=time)
 
 
 ##############################################################################
@@ -13748,7 +13379,7 @@ class FlapAt1000Ft(KeyPointValueNode):
     def derive(self, flap=M('Flap'), gates=KTI('Altitude When Descending')):
 
         for gate in gates.get(name='1000 Ft Descending'):
-            self.create_kpv(gate.index, flap.array.raw[gate.index])
+            self.create_kpv(gate.index, flap.array.raw[int(gate.index)])
 
 
 class FlapAt500Ft(KeyPointValueNode):
@@ -13763,7 +13394,7 @@ class FlapAt500Ft(KeyPointValueNode):
     def derive(self, flap=M('Flap'), gates=KTI('Altitude When Descending')):
 
         for gate in gates.get(name='500 Ft Descending'):
-            self.create_kpv(gate.index, flap.array.raw[gate.index])
+            self.create_kpv(gate.index, flap.array.raw[int(gate.index)])
 
 
 class GearDownToLandingFlapConfigurationDuration(KeyPointValueNode):
@@ -13816,7 +13447,7 @@ class GearDownToLandingFlapConfigurationDuration(KeyPointValueNode):
                 ))
 
             if not landing_flap_changes:
-                if flap_lever.array[slice_midpoint(approach.slice)] in detents:
+                if flap_lever.array[int(slice_midpoint(approach.slice))] in detents:
                     # create kpv if landing flap configuration is for entire approach
                     self.create_kpv(approach.slice.start,
                                     (approach.slice.start - last_gear_dn.index) / self.frequency)
@@ -13931,11 +13562,11 @@ class FlareDistance20FtToTouchdown(KeyPointValueNode):
             if this_landing:
                 idx_20 = index_at_value(
                     alt_aal.array, 20.0,
-                    _slice=slice(ceil(tdown.index), this_landing[0].slice.start - 1, -1))
+                    _slice=slice(int(ceil(tdown.index)), this_landing[0].slice.start - 1, -1))
                 # Integrate returns an array, so we need to take the max
                 # value to yield the KTP value.
                 if idx_20:
-                    dist = max(integrate(gspd.array[idx_20:tdown.index + 1], gspd.hz, scale=scale))
+                    dist = max(integrate(gspd.array[slices_int(idx_20, tdown.index + 1)], gspd.hz, scale=scale))
                     self.create_kpv(tdown.index, dist)
 
 
@@ -13990,6 +13621,9 @@ class FuelQtyWingDifferenceMax(KeyPointValueNode):
     If the value is positive that indicates more fuel in the right wing's tank,
     if negative - in the left wing's tank.
     '''
+
+    units = ut.KG
+
     def derive(self, left_wing=P('Fuel Qty (L)'), right_wing=P('Fuel Qty (R)'),
                airbornes=S('Airborne')):
 
@@ -14062,6 +13696,52 @@ class FuelJettisonDuration(KeyPointValueNode):
                airborne=S('Airborne')):
 
         self.create_kpvs_where(jet.array == 'Disagree', jet.hz, phase=airborne)
+
+class FuelCrossFeedValveStateAtLiftoff(KeyPointValueNode):
+    '''
+    DHK SOP requires the fuel cross feed valve to be in the closed position
+    during liftoff. An open fuel cross feed valve may be a precursor to
+    fuel imbalance.
+
+    This KPV determines whether the valve was open during each liftoff.
+    '''
+
+    @classmethod
+    def can_operate(cls, available):
+        return any_of(['Fuel Cross Feed Valve Position',
+                       'Fuel Cross Feed Valve'], available)
+
+    def derive(self, fuel_valve=P('Fuel Cross Feed Valve Position'),
+               fuel_valve_fallback=P('Fuel Cross Feed Valve'),
+               liftoffs=KTI('Liftoff')):
+
+        if fuel_valve:
+            self.create_kpvs_at_ktis(fuel_valve.array == 'Open', liftoffs,
+                                    suppress_zeros=True)
+        else:
+            self.create_kpvs_at_ktis(fuel_valve_fallback.array == 'Disagree',
+                                     liftoffs, suppress_zeros=True)
+
+class MainFuelQuantityOffBlockWithFuelInCenterTank(KeyPointValueNode):
+    '''
+    Sum of main fuel tank quantity when fuel is present in the center tank.
+
+    This KPV can be useful to detect cases where the main tanks were not full
+    but fuel was loaded in the center tank.
+    '''
+
+    units = ut.KG
+
+    def derive(self,
+               fuel_l=P('Fuel Qty (L)'),
+               fuel_r=P('Fuel Qty (R)'),
+               fuel_c=P('Fuel Qty (C)'),
+               offblocks=KTI('Off Blocks')):
+
+        offblocks = [offblock for offblock in offblocks
+                     if fuel_c.array[int(offblock.index)] > 100]
+
+        self.create_kpvs_at_ktis(fuel_l.array + fuel_r.array, offblocks)
 
 
 ##############################################################################
@@ -14224,9 +13904,10 @@ class GroundspeedDuringRejectedTakeoffMax(KeyPointValueNode):
         # Without groundspeed, we only calculate an estimated Groundspeed for RTOs.
         scale = ut.convert(GRAVITY_IMPERIAL, ut.FPS, ut.KT)
         for rto_slice in rtos.get_slices():
-            spd = integrate(accel.array[rto_slice], accel.frequency, scale=scale)
+            spd = integrate(accel.array[slices_int(rto_slice)], accel.frequency, scale=scale)
             index, value = max_value(spd)
-            self.create_kpv(rto_slice.start + index, value)
+            if value:
+                self.create_kpv(rto_slice.start + index, value)
 
 
 class GroundspeedAtLiftoff(KeyPointValueNode):
@@ -14255,105 +13936,6 @@ class GroundspeedAtTouchdown(KeyPointValueNode):
                touchdowns=KTI('Touchdown')):
 
         self.create_kpvs_at_ktis(gnd_spd.array, touchdowns)
-
-
-class Groundspeed20FtToTouchdownMax(KeyPointValueNode):
-    '''
-    The highest groundspeed during the flare manoeuvre.
-    '''
-
-    units = ut.KT
-
-    can_operate = helicopter_only
-
-    def derive(self,
-               air_spd=P('Groundspeed'),
-               alt_agl=P('Altitude AGL'),
-               touchdowns=KTI('Touchdown')):
-
-        self.create_kpvs_within_slices(
-            air_spd.array,
-            alt_agl.slices_to_kti(20, touchdowns),
-            max_value,
-        )
-
-
-class Groundspeed20SecToOffshoreTouchdownMax(KeyPointValueNode):
-    '''
-    Find the maximum groundspeed 20 seconds from the point of an offshore touchdown.
-    (helicopters only)
-    '''
-    units = ut.KT
-
-    can_operate = helicopter_only
-
-    def derive(self, groundspeed=P('Groundspeed'),
-               touchdown=KTI('Offshore Touchdown'),
-               secs_tdwn=KTI('Secs To Touchdown')):
-
-        #idx_to_tdwn = \
-            #[s.index for s in secs_tdwn if s.name == '20 Secs To Touchdown']
-        #idx_at_tdwn = [t.index for t in touchdown]
-
-        #if idx_to_tdwn and idx_at_tdwn:
-            #_slice = [slice(a, b) for a, b in zip(idx_to_tdwn, idx_at_tdwn)]
-            #self.create_kpvs_within_slices(groundspeed.array, _slice,
-                                           #max_value)
-        for tdwn in touchdown:
-            secs_to_touchdown = secs_tdwn.get_previous(tdwn.index)
-            if secs_to_touchdown:
-                self.create_kpv(*max_value(groundspeed.array,
-                                           _slice=slice(secs_to_touchdown.index, tdwn.index+1),
-                                           start_edge=secs_to_touchdown.index,
-                                           stop_edge=tdwn.index))
-
-
-class Groundspeed0_8NMToOffshoreTouchdownSpecialProcedure(KeyPointValueNode):
-    '''
-    Groundspeed at 0.8 NM away from an offshore touchdown during a Shuttling Approach,
-    ARDA or AROA. (helicopters only)
-    '''
-
-    name = 'Groundspeed 0.8 NM To Offshore Touchdown Special Procedure'
-
-    units = ut.KT
-
-    can_operate = helicopter_only
-
-    def derive(self, groundspeed=P('Groundspeed'),
-               dtts=KTI('Distance To Touchdown'), touchdown=KTI('Offshore Touchdown'),
-               approaches=App('Approach Information')):
-
-        for approach in approaches:
-            if approach.type in ['SHUTTLING','AIRBORNE_RADAR']:
-                for tdwn in touchdown:
-                    if is_index_within_slice(tdwn.index, slice(approach.slice.start, approach.slice.stop+10)):
-                        dist_to_touchdown = dtts.get_previous(tdwn.index, name='0.8 NM To Touchdown')
-                        if dist_to_touchdown:
-                            self.create_kpvs_at_ktis(groundspeed.array, [dist_to_touchdown])
-
-
-class Groundspeed0_8NMToOffshoreTouchdownStandardApproach(KeyPointValueNode):
-    '''
-    Groundspeed at 0.8 NM away from an offshore touchdown during a standard
-    approach. (helicopters only)
-    '''
-
-    name = 'Groundspeed 0.8 NM To Offshore Touchdown Standard Approach'
-    units = ut.KT
-    can_operate = helicopter_only
-
-    def derive(self, groundspeed=P('Groundspeed'),
-               dtts=KTI('Distance To Touchdown'), touchdown=KTI('Offshore Touchdown'),
-               approaches=App('Approach Information')):
-
-        for approach in approaches:
-            if approach.type in ['APPROACH', 'LANDING', 'GO_AROUND', 'TOUCH_AND_GO', 'RIG']:
-                for tdwn in touchdown:
-                    if is_index_within_slice(tdwn.index, slice(approach.slice.start, approach.slice.stop+10)):
-                        dist_to_touchdown = dtts.get_previous(tdwn.index, name='0.8 NM To Touchdown')
-                        if dist_to_touchdown:
-                            self.create_kpvs_at_ktis(groundspeed.array, [dist_to_touchdown])
 
 
 class GroundspeedVacatingRunway(KeyPointValueNode):
@@ -14393,7 +13975,7 @@ class GroundspeedAtTOGA(KeyPointValueNode):
         indexes = find_edges_on_state_change('TOGA', toga.array, phase=takeoffs)
         for index in indexes:
             # Measure at known state instead of interpolated transition
-            index = ceil(index)
+            index = int(ceil(index))
             self.create_kpv(index, value_at_index(gnd_spd.array, index))
 
 
@@ -14552,91 +14134,6 @@ class GroundspeedFlapChangeDuringTakeoffMax(KeyPointValueNode):
         self.create_kpvs_within_slices(gspd_masked, takeoff_roll, max_value)
 
 
-class GroundspeedBelow15FtFor20SecMax(KeyPointValueNode):
-    '''
-    Maximum groundspeed below 15ft AAL recorded for at least 20 seconds
-    while airborne.
-    '''
-
-    units = ut.KT
-
-    can_operate = helicopter_only
-
-    def derive(self, gnd_spd=P('Groundspeed'), alt_aal=P('Altitude AAL For Flight Phases'), airborne=S('Airborne')):
-        gspd_20_sec = second_window(gnd_spd.array, self.frequency, 20)
-        height_bands = slices_and(airborne.get_slices(),
-                                  slices_below(alt_aal.array, 15)[1])
-        self.create_kpv_from_slices(gspd_20_sec, height_bands, max_value)
-
-
-class GroundspeedWhileAirborneWithASEOff(KeyPointValueNode):
-    '''
-    Measures the maximum groundspeed during flight with stability systems disengaged.
-    '''
-
-    name = 'Groundspeed While Airborne With ASE Off'
-    units = ut.KT
-
-    can_operate = helicopter_only
-
-    def derive(self, gnd_spd=P('Groundspeed'), ase=M('ASE Engaged'), airborne=S('Airborne')):
-        sections = clump_multistate(ase.array, 'Engaged', airborne.get_slices(), False)
-        self.create_kpvs_within_slices(gnd_spd.array, sections, max_value)
-
-
-class GroundspeedWhileHoverTaxiingMax(KeyPointValueNode):
-    '''
-    Maximum groundspeed reached durng hover taxi.
-    '''
-
-    name = 'Groundspeed While Hover Taxiing Max'
-    units = ut.KT
-
-    can_operate = helicopter_only
-
-    def derive(self, gnd_spd=P('Groundspeed'), hover_taxi=S('Hover Taxi')):
-        self.create_kpvs_within_slices(gnd_spd.array, hover_taxi.get_slices(), max_value)
-
-
-class GroundspeedWithZeroAirspeedFor5SecMax(KeyPointValueNode):
-    '''
-    Maximum groundspeed recorded for at least 5 seconds with airspeed at 0.
-    '''
-
-    align_frequency = 2
-    units = ut.KT
-
-    can_operate = helicopter_only
-
-    def derive(self, wind_spd=P('Wind Speed'), wind_dir=P('Wind Direction'),
-               gnd_spd=P('Groundspeed'), heading=P('Heading'),
-               airborne=S('Airborne')):
-
-        rad_scale = np.radians(1.0)
-        headwind = gnd_spd.array + wind_spd.array * np.ma.cos((wind_dir.array-heading.array)*rad_scale)
-        if np.ma.count(headwind):
-            zero_airspeed = slices_and(airborne.get_slices(),
-                                    slices_below(headwind, 0)[1])
-            zero_airspeed = slices_remove_small_slices(zero_airspeed, time_limit=5,
-                                                      hz=self.frequency)
-            self.create_kpvs_within_slices(gnd_spd.array, zero_airspeed, max_value)
-
-
-class GroundspeedBelow100FtMax(KeyPointValueNode):
-    '''
-    Maximum groundspeed below 100ft AGL (helicopter only)
-    '''
-    units = ut.KT
-
-    can_operate = helicopter_only
-
-    def derive(self, gnd_spd=P('Groundspeed'), alt_agl=P('Altitude AGL For Flight Phases'),
-               airborne=S('Airborne')):
-        alt_slices = slices_and(airborne.get_slices(),
-                                alt_agl.slices_below(100))
-        self.create_kpvs_within_slices(gnd_spd.array,
-                                       alt_slices,
-                                       max_value)
 
 ##############################################################################
 # Law
@@ -14807,76 +14304,6 @@ class PitchAbove1000FtMax(KeyPointValueNode):
     def derive(self, pitch=P('Pitch'), alt=P('Altitude AAL')):
         self.create_kpvs_within_slices(pitch.array,
                                        alt.slices_above(1000), max_value)
-
-
-class PitchBelow1000FtMax(KeyPointValueNode):
-    '''
-    Maximum Pitch below 1000ft AGL in flight (helicopter_only).
-    '''
-    can_operate = helicopter_only
-
-    units = ut.DEGREE
-
-    def derive(self, pitch=P('Pitch'), alt=P('Altitude AGL')):
-        self.create_kpvs_within_slices(pitch.array,
-                                       alt.slices_below(1000), max_value)
-
-
-class PitchBelow1000FtMin(KeyPointValueNode):
-    '''
-    Minimum Pitch below 1000ft AGL in flight (helicopter_only).
-    '''
-    can_operate = helicopter_only
-
-    units = ut.DEGREE
-
-    def derive(self, pitch=P('Pitch'), alt=P('Altitude AGL')):
-        self.create_kpvs_within_slices(pitch.array,
-                                       alt.slices_below(1000), min_value)
-
-
-class PitchBelow5FtMax(KeyPointValueNode):
-    '''
-    Maximum Pitch below 5ft AGL in flight (helicopter_only).
-    '''
-    can_operate = helicopter_only
-
-    units = ut.DEGREE
-
-    def derive(self, pitch=P('Pitch'), alt_agl=P('Altitude AGL'),
-               airborne=S('Airborne')):
-        slices = slices_and(airborne.get_slices(), alt_agl.slices_below(5))
-        self.create_kpvs_within_slices(pitch.array, slices, max_value)
-
-
-class Pitch5To10FtMax(KeyPointValueNode):
-    '''
-    Maximum Pitch ascending 5 to 10ft AGL in flight (helicopter_only).
-    '''
-    can_operate = helicopter_only
-
-    units = ut.DEGREE
-
-    def derive(self, pitch=P('Pitch'), alt_agl=P('Altitude AGL'),
-               airborne=S('Airborne')):
-        slices = slices_and(airborne.get_slices(),
-                            alt_agl.slices_from_to(5, 10))
-        self.create_kpvs_within_slices(pitch.array, slices, max_value)
-
-
-class Pitch10To5FtMax(KeyPointValueNode):
-    '''
-    Maximum Pitch descending 10 to 5ft AGL in flight (helicopter_only).
-    '''
-    can_operate = helicopter_only
-
-    units = ut.DEGREE
-
-    def derive(self, pitch=P('Pitch'), alt_agl=P('Altitude AGL'),
-               airborne=S('Airborne')):
-        slices = slices_and(airborne.get_slices(),
-                            alt_agl.slices_from_to(10, 5))
-        self.create_kpvs_within_slices(pitch.array, slices, max_value)
 
 
 class PitchTakeoffMax(KeyPointValueNode):
@@ -15215,56 +14642,6 @@ class Pitch500To50FtMin(KeyPointValueNode):
                 min_value)
 
 
-class Pitch500To100FtMax(KeyPointValueNode):
-    '''
-    Maximum pitch 500ft to 100ft AGL. Helicopter only.
-    '''
-
-    units = ut.DEGREE
-
-    can_operate = helicopter_only
-
-    def derive(self,
-               pitch=P('Pitch'),
-               alt_agl=P('Altitude AGL For Flight Phases'),
-               descending=S('Descent'),
-               ac_type=A('Aircraft Type')):
-
-        alt_band = np.ma.masked_outside(alt_agl.array, 100, 500)
-        alt_app_sections = valid_slices_within_array(alt_band, descending)
-        self.create_kpvs_within_slices(
-            pitch.array,
-            alt_app_sections,
-            max_value,
-            min_duration=HOVER_MIN_DURATION,
-            freq=pitch.frequency)
-
-
-class Pitch500To100FtMin(KeyPointValueNode):
-    '''
-    Minimum pitch 500ft to 100ft AGL. Helicopter only.
-    '''
-
-    units = ut.DEGREE
-
-    can_operate = helicopter_only
-
-    def derive(self,
-               pitch=P('Pitch'),
-               alt_agl=P('Altitude AGL For Flight Phases'),
-               descending=S('Descent'),
-               ac_type=A('Aircraft Type')):
-
-        alt_band = np.ma.masked_outside(alt_agl.array, 100, 500)
-        alt_app_sections = valid_slices_within_array(alt_band, descending)
-        self.create_kpvs_within_slices(
-            pitch.array,
-            alt_app_sections,
-            min_value,
-            min_duration=HOVER_MIN_DURATION,
-            freq=pitch.frequency)
-
-
 class Pitch500To20FtMin(KeyPointValueNode):
     '''
     Minimum pitch 500ft to 20ft AAL.
@@ -15319,56 +14696,6 @@ class Pitch500To7FtMin(KeyPointValueNode):
         )
 
 
-class Pitch100To20FtMax(KeyPointValueNode):
-    '''
-    Maximum pitch 100ft to 20ft AAL.
-    '''
-
-    units = ut.DEGREE
-
-    can_operate = helicopter_only
-
-    def derive(self,
-               pitch=P('Pitch'),
-               alt_agl=P('Altitude AGL For Flight Phases'),
-               descending=S('Descent'),
-               ac_type=A('Aircraft Type')):
-
-        alt_band = np.ma.masked_outside(alt_agl.array, 20, 100)
-        alt_app_sections = valid_slices_within_array(alt_band, descending)
-        self.create_kpvs_within_slices(
-            pitch.array,
-            alt_app_sections,
-            max_value,
-            min_duration=HOVER_MIN_DURATION, # TODO: check where this came from.
-            freq=pitch.frequency)
-
-
-class Pitch100To20FtMin(KeyPointValueNode):
-    '''
-    Minimum pitch 100ft to 20ft AGL. Helicopter only.
-    '''
-
-    units = ut.DEGREE
-
-    can_operate = helicopter_only
-
-    def derive(self,
-               pitch=P('Pitch'),
-               alt_agl=P('Altitude AGL For Flight Phases'),
-               descending=S('Descent'),
-               ac_type=A('Aircraft Type')):
-
-        alt_band = np.ma.masked_outside(alt_agl.array, 20, 100)
-        alt_app_sections = valid_slices_within_array(alt_band, descending)
-        self.create_kpvs_within_slices(
-            pitch.array,
-            alt_app_sections,
-            min_value,
-            min_duration=HOVER_MIN_DURATION, # TODO: check where this came from.
-            freq=pitch.frequency)
-
-
 class Pitch50FtToTouchdownMax(KeyPointValueNode):
     '''
     Maximum pitch 50ft AAL (AGL for helicopters) to touchdown.
@@ -15398,27 +14725,6 @@ class Pitch50FtToTouchdownMax(KeyPointValueNode):
             pitch.array,
             (alt_aal or alt_agl).slices_to_kti(50, touchdowns),
             max_value)
-
-
-class Pitch50FtToTouchdownMin(KeyPointValueNode):
-    '''
-    Minimum pitch 50ft AGL to touchdown. Helicopter only.
-    '''
-
-    units = ut.DEGREE
-
-    can_operate = helicopter_only
-
-    def derive(self,
-               pitch=P('Pitch'),
-               alt_agl=P('Altitude AGL'),
-               touchdowns=KTI('Touchdown')):
-
-        self.create_kpvs_within_slices(
-            pitch.array,
-            alt_agl.slices_to_kti(50, touchdowns),
-            min_value,
-        )
 
 
 class Pitch20FtToTouchdownMin(KeyPointValueNode):
@@ -15562,76 +14868,6 @@ class PitchDuringGoAroundMax(KeyPointValueNode):
         self.create_kpvs_within_slices(pitch.array, go_arounds, max_value)
 
 
-class PitchOnGroundMax(KeyPointValueNode):
-    '''
-    Pitch attitude maximum to check for sloping ground operation.
-    '''
-    units = ut.DEGREE
-
-    can_operate = helicopter_only
-
-    def derive(self, pitch=P('Pitch'), coll=P('Collective'),
-               grounded=S('Grounded'), on_deck=S('On Deck')):
-        '''
-        The collective parameter ensures this is not the attitude during liftoff.
-        '''
-        my_slices = slices_and_not(grounded.get_slices(), on_deck.get_slices())
-        _, low_coll = slices_below(coll.array, 25.0)
-        my_slices = slices_and(my_slices, low_coll)
-        self.create_kpvs_within_slices(pitch.array,
-                                       my_slices,
-                                       max_value)
-
-
-class PitchOnDeckMax(KeyPointValueNode):
-    '''
-    Pitch attitude maximum during operation on a moving deck.
-    '''
-    units = ut.DEGREE
-
-    can_operate = helicopter_only
-
-    def derive(self, pitch=P('Pitch'), coll=P('Collective'), on_deck=S('On Deck')):
-        _, low_coll = slices_below(coll.array, 25.0)
-        my_slices = slices_and(on_deck.get_slices(), low_coll)
-        self.create_kpvs_within_slices(pitch.array,
-                                       my_slices,
-                                       max_value)
-
-
-class PitchOnGroundMin(KeyPointValueNode):
-    '''
-    Minimum pitch on the ground (or deck).
-    '''
-    units = ut.DEGREE
-
-    can_operate = helicopter_only
-
-    def derive(self, pitch=P('Pitch'), coll=P('Collective'), grounded=S('Grounded'), on_deck=S('On Deck')):
-        _, low_coll = slices_below(coll.array, 25.0)
-        my_slices = slices_and(on_deck.get_slices(), low_coll)
-        my_slices = slices_and_not(grounded.get_slices(), my_slices)
-        self.create_kpvs_within_slices(pitch.array,
-                                       my_slices,
-                                       min_value)
-
-
-class PitchOnDeckMin(KeyPointValueNode):
-    '''
-    Minimum pitch while on deck.
-    '''
-    units = ut.DEGREE
-
-    can_operate = helicopter_only
-
-    def derive(self, pitch=P('Pitch'), coll=P('Collective'), on_deck=S('On Deck')):
-        _, low_coll = slices_below(coll.array, 25.0)
-        my_slices = slices_and(on_deck.get_slices(), low_coll)
-        self.create_kpvs_within_slices(pitch.array,
-                                       my_slices,
-                                       min_value)
-
-
 class PitchWhileAirborneMax(KeyPointValueNode):
     '''
     Maximum pitch while airborne.
@@ -15703,45 +14939,6 @@ class PitchAboveFL200Min(KeyPointValueNode):
                                        alt.slices_above(20000), min_value)
 
 
-class PitchNoseDownAttitudeAdoptionDuration(KeyPointValueNode):
-    '''
-    Duration of time it takes for the helicopter to reach -10 degrees
-    pitch (minimum pitch as a fallback) after nose down attitude initiation.
-    '''
-    units = ut.SECOND
-    align_frequency = 16
-
-    @classmethod
-    def can_operate(cls, available, ac_type=A('Aircraft Type'),
-                    family=A('Family')):
-        return ac_type == helicopter and family and family.value == 'H175'\
-               and 'Nose Down Attitude Adoption' in available
-
-    def derive(self,
-               nose_downs=S('Nose Down Attitude Adoption')):
-
-        self.create_kpvs_from_slice_durations(nose_downs,
-                                              nose_downs.hz, mark='end')
-
-class PitchMinimumDuringNoseDownAttitudeAdoption(KeyPointValueNode):
-    '''
-    Minimum pitch during nose down attitude adoption.
-    '''
-    units = ut.DEGREE
-    align_frequency = 16
-
-    @classmethod
-    def can_operate(cls, available, ac_type=A('Aircraft Type'),
-                    family=A('Family')):
-        return ac_type == helicopter and family and family.value == 'H175'\
-               and all_of(('Pitch', 'Nose Down Attitude Adoption'), available)
-
-    def derive(self, pitch=P('Pitch'),
-               nose_downs=S('Nose Down Attitude Adoption')):
-
-        for nose_down in nose_downs:
-            self.create_kpv(nose_down.slice.stop,
-                            pitch.array[nose_down.slice.stop])
 
 ##############################################################################
 # Pitch Rate
@@ -16242,60 +15439,6 @@ class RateOfDescent1000To500FtMax(KeyPointValueNode):
             freq=vrt_spd.frequency)
 
 
-class RateOfDescent100To20FtMax(KeyPointValueNode):
-    '''
-    Measures the most negative vertical speed (rate of descent) between
-    100ft and 20ft AAL.
-    '''
-
-    units = ut.FPM
-
-    can_operate = helicopter_only
-
-    def derive(self,
-               vrt_spd=P('Vertical Speed Inertial'),
-               alt_agl=P('Altitude AGL'),
-               descending=S('Descent')):
-
-        alt_band = np.ma.masked_outside(alt_agl.array, 100, 20)
-        # maximum RoD must be a big negative value; mask all positives
-        alt_band[vrt_spd.array > 0] = np.ma.masked
-        alt_app_sections = valid_slices_within_array(alt_band, descending)
-        self.create_kpvs_within_slices(
-            vrt_spd.array,
-            alt_app_sections,
-            min_value,
-            min_duration=5.0,
-            freq=vrt_spd.frequency)
-
-
-class RateOfDescent500To100FtMax(KeyPointValueNode):
-    '''
-    Measures the most negative vertical speed (rate of descent) between
-    500ft and 100ft AAL.
-    '''
-
-    units = ut.FPM
-
-    can_operate = helicopter_only
-
-    def derive(self,
-               vrt_spd=P('Vertical Speed Inertial'),
-               alt_agl=P('Altitude AGL'),
-               descending=S('Descent')):
-
-        alt_band = np.ma.masked_outside(alt_agl.array, 500, 100)
-        # maximum RoD must be a big negative value; mask all positives
-        alt_band[vrt_spd.array > 0] = np.ma.masked
-        alt_app_sections = valid_slices_within_array(alt_band, descending)
-        self.create_kpvs_within_slices(
-            vrt_spd.array,
-            alt_app_sections,
-            min_value,
-            min_duration=5.0,
-            freq=vrt_spd.frequency)
-
-
 class RateOfDescent500To50FtMax(KeyPointValueNode):
     '''
     Measures the most negative vertical speed (rate of descent) between
@@ -16333,34 +15476,6 @@ class RateOfDescent500To50FtMax(KeyPointValueNode):
             min_value,
             min_duration=5.0,
             freq=vrt_spd.frequency)
-
-
-class RateOfDescent20FtToTouchdownMax(KeyPointValueNode):
-    '''
-    Measures the most negative vertical speed (rate of descent) between 20ft
-    and touchdown. Uses altitude AGL. Helicopter only.
-    '''
-
-    units = ut.FPM
-
-    can_operate = helicopter_only
-
-    def derive(self,
-               vrt_spd=P('Vertical Speed Inertial'),
-               touchdowns=KTI('Touchdown'),
-               alt_agl=P('Altitude AGL')):
-        '''
-        The ground effect compressibility makes the normal pressure altitude
-        based vertical speed meaningless, so we use the more complex inertial
-        computation to give accurate measurements within ground effect.
-        '''
-        # maximum RoD must be a big negative value; mask all positives
-        vrt_spd.array[vrt_spd.array > 0] = np.ma.masked
-        self.create_kpvs_within_slices(
-            vrt_spd.array,
-            alt_agl.slices_to_kti(20, touchdowns),
-            min_value,
-        )
 
 
 class RateOfDescent50FtToTouchdownMax(KeyPointValueNode):
@@ -16445,44 +15560,6 @@ class RateOfDescentBelow80KtsMax(KeyPointValueNode):
                 self.create_kpv_from_slices(vrt_spd.array, slow_bands, min_value)
 
 
-class RateOfDescentBelow500FtMax(KeyPointValueNode):
-    '''
-    Returns the highest single rate of descent for all periods below 500ft AGL.
-    '''
-
-    units = ut.FPM
-
-    can_operate = helicopter_only
-
-    def derive(self,
-               vrt_spd=P('Vertical Speed Inertial'),
-               alt_agl=P('Altitude AGL For Flight Phases'),
-               descending=S('Descending')):
-        height_bands = slices_and(descending.get_slices(),
-                                  slices_below(alt_agl.array, 500)[1])
-        self.create_kpvs_within_slices(vrt_spd.array, height_bands, min_value,
-            min_duration=HOVER_MIN_DURATION, freq=vrt_spd.frequency)
-
-
-
-class RateOfDescentBelow30KtsWithPowerOnMax(KeyPointValueNode):
-    '''
-    Rate of descent below 30kts IAS with engine power on max.
-    '''
-
-    units = ut.FPM
-
-    can_operate = helicopter_only
-
-    def derive(self, vrt_spd=P('Vertical Speed Inertial'), air_spd=P('Airspeed'), descending=S('Descending'),
-               power=P('Eng (*) Torque Avg')):
-        speed_bands = slices_and(descending.get_slices(),
-                                  slices_below(air_spd.array, 30)[1])
-        speed_bands = slices_and(speed_bands,
-                                 slices_above(power.array, 20.0)[1])
-        self.create_kpvs_within_slices(vrt_spd.array, speed_bands, min_value)
-
-
 class RateOfDescentAtHeightBeforeLevelFlight(KeyPointValueNode):
     '''
     Rate of descent at various altitudes before level off.
@@ -16504,28 +15581,6 @@ class RateOfDescentAtHeightBeforeLevelFlight(KeyPointValueNode):
                 value = value_at_index(vert_spd.array, kti.index)
                 self.create_kpv(kti.index, value,
                                 replace_values={'altitude': altitude})
-
-
-class VerticalSpeedAtAltitude(KeyPointValueNode):
-    '''
-    Approach vertical speed at 500 and 300 Ft
-    '''
-    NAME_FORMAT = 'Vertical Speed At %(altitude)d Ft'
-    NAME_VALUES = {'altitude': [500, 300]}
-    units = ut.FPM
-    can_operate = helicopter_only
-
-    def derive(self, vert_spd=P('Vertical Speed'), alt_agl=P('Altitude AGL'),
-               approaches=S('Approach')):
-        for approach in approaches:
-            for altitude in self.NAME_VALUES['altitude']:
-                index = index_at_value(alt_agl.array, altitude,
-                                       approach.slice, 'nearest')
-                if not index:
-                    continue
-                value = value_at_index(vert_spd.array, index)
-                if value:
-                    self.create_kpv(index, value, altitude=altitude)
 
 
 ##############################################################################
@@ -16668,27 +15723,6 @@ class Roll300To20FtMax(KeyPointValueNode):
         )
 
 
-class Roll100To20FtMax(KeyPointValueNode):
-    '''
-    Maximum recorded roll angle between 100ft and 20ft AAL.
-    '''
-
-    units = ut.DEGREE
-
-    can_operate = helicopter_only
-
-    def derive(self, roll=P('Roll'), alt_agl=P('Altitude AGL For Flight Phases'), descending=S('Descent')):
-        alt_band = np.ma.masked_outside(alt_agl.array, 100, 20)
-        alt_app_sections = valid_slices_within_array(alt_band, descending)
-        self.create_kpvs_within_slices(
-            roll.array,
-            alt_app_sections,
-            max_abs_value,
-            min_duration=HOVER_MIN_DURATION,
-            freq=roll.frequency,
-        )
-
-
 class Roll20FtToTouchdownMax(KeyPointValueNode):
     '''
     Maximum recorded roll angle between 20ft AAL and
@@ -16739,117 +15773,6 @@ class Roll500FtToTouchdownMax(KeyPointValueNode):
             alt_aal.slices_to_kti(500, touchdowns),
             max_abs_value,
         )
-
-
-class RollAbove300FtMax(KeyPointValueNode):
-    '''
-    Maximum Roll above 300ft AGL in flight (helicopter_only).
-    '''
-
-    units = ut.DEGREE
-
-    can_operate = helicopter_only
-
-    def derive(self, roll=P('Roll'), alt_agl=P('Altitude AGL For Flight Phases')):
-        _, height_bands = slices_above(alt_agl.array, 300)
-        self.create_kpvs_within_slices(roll.array, height_bands, max_abs_value)
-
-
-class RollBelow300FtMax(KeyPointValueNode):
-    '''
-    Maximum Roll below 300ft AGL in flight (helicopter_only).
-    '''
-
-    units = ut.DEGREE
-
-    can_operate = helicopter_only
-
-    def derive(self, roll=P('Roll'), alt_agl=P('Altitude AGL For Flight Phases'),
-               airborne=S('Airborne')):
-        alt_slices = slices_and(airborne.get_slices(),
-                                slices_below(alt_agl.array, 300)[1])
-        self.create_kpvs_within_slices(roll.array, alt_slices, max_abs_value)
-
-
-class RollWithAFCSDisengagedMax(KeyPointValueNode):
-    '''
-    Maximum roll whilst AFCS 1 and AFCS 2 are disengaged.
-    '''
-    units = ut.DEGREE
-    name = 'Roll With AFCS Disengaged Max'
-    can_operate = helicopter_only
-
-    def derive(self, roll=P('Roll'), afcs1=M('AFCS (1) Engaged'),
-               afcs2=M('AFCS (2) Engaged')):
-        afcs = vstack_params_where_state((afcs1, 'Engaged'),
-                                         (afcs2, 'Engaged')).any(axis=0)
-
-        afcs_slices = np.ma.clump_unmasked(np.ma.masked_equal(afcs, 1))
-        self.create_kpvs_within_slices(roll.array, afcs_slices, max_abs_value)
-
-
-class RollAbove500FtMax(KeyPointValueNode):
-    '''
-    Maximum Roll above 500ft AGL in flight (helicopter only).
-    '''
-
-    units = ut.DEGREE
-
-    can_operate = helicopter_only
-
-    def derive(self, roll=P('Roll'), alt_agl=P('Altitude AGL For Flight Phases')):
-        height_bands = slices_above(alt_agl.array, 500)[1]
-        self.create_kpvs_within_slices(roll.array, height_bands, max_abs_value)
-
-
-class RollBelow500FtMax(KeyPointValueNode):
-    '''
-    Maximum Roll below 500ft AGL in flight (helicopter only).
-    '''
-
-    units = ut.DEGREE
-
-    can_operate = helicopter_only
-
-    def derive(self, roll=P('Roll'), alt_agl=P('Altitude AGL For Flight Phases')):
-        height_bands = slices_below(alt_agl.array, 500)[1]
-        self.create_kpvs_within_slices(roll.array, height_bands, max_abs_value)
-
-
-class RollOnGroundMax(KeyPointValueNode):
-    '''
-    Roll attitude on firm ground or a solid rig platform
-    '''
-
-    units = ut.DEGREE
-
-    can_operate = helicopter_only
-
-    def derive(self, roll=P('Roll'), coll=P('Collective'), grounded=S('Grounded'), on_deck=S('On Deck')):
-        my_slices = slices_and_not(grounded.get_slices(), on_deck.get_slices())
-        _, low_coll = slices_below(coll.array, 25.0)
-        my_slices = slices_and(my_slices, low_coll)
-        self.create_kpvs_within_slices(roll.array,
-                                       my_slices,
-                                       max_abs_value)
-
-
-class RollOnDeckMax(KeyPointValueNode):
-    '''
-    Roll attitude on moving deck
-    '''
-
-    units = ut.DEGREE
-
-    can_operate = helicopter_only
-
-    def derive(self, roll=P('Roll'), coll=P('Collective'), on_deck=S('On Deck')):
-
-        _, low_coll = slices_below(coll.array, 25.0)
-        my_slices = slices_and(on_deck.get_slices(), low_coll)
-        self.create_kpvs_within_slices(roll.array,
-                                       my_slices,
-                                       max_abs_value)
 
 
 class RollCyclesExceeding5DegDuringFinalApproach(KeyPointValueNode):
@@ -16972,7 +15895,7 @@ class RollCyclesNotDuringFinalApproach(KeyPointValueNode):
         not_fas = slices_and_not(airborne.get_slices(), fin_apps.get_slices())
         # TODO: Fix this:
         #not_fas = slices_and_not(not_fas.get_slices(), landings.get_slices())
-        for not_fa in not_fas:
+        for not_fa in slices_int(not_fas):
             self.create_kpv(*cycle_counter(
                 roll.array[not_fa],
                 5.0, 10.0, roll.hz,
@@ -17134,25 +16057,6 @@ class RollLeftAbove8000FtAltitudeDensityAbove60Kts(KeyPointValueNode):
         )
 
 
-class RollRateMax(KeyPointValueNode):
-    '''
-    Maximum recorded roll rate. Helicopter only.
-    '''
-
-    units = ut.DEGREE_S
-
-    can_operate = helicopter_only
-
-    def derive(self, rr=P('Roll Rate'), airs=S('Airborne')):
-
-        for air in airs:
-            cycles = cycle_finder(rr.array[air.slice], min_step=5.0)
-            for index in cycles[0][1:-1]:
-                roll_rate = rr.array[index]
-                if abs(roll_rate) > 5.0:
-                    self.create_kpv(index+air.slice.start, roll_rate)
-
-
 class RollAboveFL200Max(KeyPointValueNode):
     '''
     Maximum bank angle above FL200  (Alt STD Smoothed) (absolute value)
@@ -17196,219 +16100,10 @@ class RollRateMaxAboveLimitAtTouchdown(KeyPointValueNode):
         for i in indices:
             window_start = i - (2*self.hz)
             window_end = i + (2*self.hz) + 1 # +1 so that the number of indices is equal on both sides of peak acceleration
-            rr_over_limit = abs(roll_rate.array[window_start:window_end]) - \
-                            limit.array[window_start:window_end]
+            window_slice = slices_int(window_start, window_end)
+            rr_over_limit = abs(roll_rate.array[window_slice]) - \
+                            limit.array[window_slice]
             self.create_kpv(np.argmax(rr_over_limit)+window_start, max(rr_over_limit))
-
-
-
-##############################################################################
-# Rotor
-
-
-class RotorSpeedDuringAutorotationAbove108KtsMin(KeyPointValueNode):
-    '''
-    Minimum recorded rotor speed during autorotation above 108kts IAS.
-    '''
-
-    units = ut.PERCENT
-
-    can_operate = helicopter_only
-
-    def derive(self, nr=P('Nr'), air_spd=P('Airspeed'), autorotation=S('Autorotation')):
-        speed_bands = slices_and(autorotation.get_slices(),
-                                  slices_above(air_spd.array, 108)[1])
-        self.create_kpvs_within_slices(nr.array, speed_bands, min_value)
-
-
-class RotorSpeedDuringAutorotationBelow108KtsMin(KeyPointValueNode):
-    '''
-    Minimum recorded rotor speed during autorotation below 108kts IAS.
-    '''
-
-    units = ut.PERCENT
-
-    can_operate = helicopter_only
-
-    def derive(self, nr=P('Nr'), air_spd=P('Airspeed'), autorotation=S('Autorotation')):
-        speed_bands = slices_and(autorotation.get_slices(),
-                                  slices_below(air_spd.array, 108)[1])
-        self.create_kpvs_within_slices(nr.array, speed_bands, min_value)
-
-
-class RotorSpeedDuringAutorotationMax(KeyPointValueNode):
-    '''
-    Maximum recorded rotor speed during autorotation.
-    '''
-
-    units = ut.PERCENT
-
-    can_operate = helicopter_only
-
-    def derive(self, nr=P('Nr'), autorotation=S('Autorotation')):
-        self.create_kpvs_within_slices(nr.array, autorotation.get_slices(), max_value)
-
-
-class RotorSpeedDuringAutorotationMin(KeyPointValueNode):
-    '''
-    Minimum rotor speed during autorotion. (helicopter only)
-    '''
-
-    units = ut.PERCENT
-
-    can_operate = helicopter_only
-
-    def derive(self, nr=P('Nr'), autorotation=S('Autorotation')):
-        self.create_kpvs_within_slices(nr.array, autorotation.get_slices(),
-                                       min_value)
-
-
-class RotorSpeedWhileAirborneMax(KeyPointValueNode):
-    '''
-    This excludes autorotation, so is maximum rotor speed with power applied.
-    '''
-
-    units = ut.PERCENT
-
-    can_operate = helicopter_only
-
-    def derive(self, nr=P('Nr'), airborne=S('Airborne'), autorotation=S('Autorotation')):
-        self.create_kpv_from_slices(nr.array,
-                                    slices_and_not(airborne.get_slices(),
-                                                  autorotation.get_slices()),
-                                    max_value)
-
-
-class RotorSpeedWhileAirborneMin(KeyPointValueNode):
-    '''
-    This excludes autorotation, so is minimum rotor speed with power applied.
-    '''
-
-    units = ut.PERCENT
-
-    can_operate = helicopter_only
-
-    def derive(self, nr=P('Nr'), airborne=S('Airborne'), autorotation=S('Autorotation')):
-        self.create_kpv_from_slices(nr.array,
-                                    slices_and_not(airborne.get_slices(),
-                                                   autorotation.get_slices()),
-                                    min_value)
-
-
-class RotorSpeedWithRotorBrakeAppliedMax(KeyPointValueNode):
-    '''
-    Maximum rotor speed recorded with rotor brake applied.
-    '''
-
-    units = ut.PERCENT
-
-    can_operate = helicopter_only
-
-    def derive(self, nr=P('Nr'), rotor_brake=P('Rotor Brake Engaged')):
-        nr_array = np.ma.masked_less(nr.array, 1) # not interested if Rotor is not turning.
-        slices = clump_multistate(rotor_brake.array, 'Engaged')
-        # Synthetic minimum duration to ensure two samples needed to trigger.
-        self.create_kpvs_within_slices(nr_array, slices, max_value, min_duration=1, freq=1)
-
-
-class RotorsRunningDuration(KeyPointValueNode):
-    '''
-    Duration for which the rotors were running.
-    '''
-
-    units = ut.SECOND
-
-    can_operate = helicopter_only
-
-    def derive(self, rotors=M('Rotors Running')):
-        running = runs_of_ones(rotors.array == 'Running')
-        if running:
-            value = slices_duration(running, rotors.frequency)
-            self.create_kpv(running[-1].stop, value)
-
-
-class RotorSpeedDuringMaximumContinuousPowerMin(KeyPointValueNode):
-    '''
-    Minimum rotor speed during maximum continuous power phase.
-    '''
-
-    units = ut.PERCENT
-
-    can_operate = helicopter_only
-
-    def derive(self, nr=P('Nr'), mcp=S('Maximum Continuous Power'), autorotation=S('Autorotation')):
-        self.create_kpv_from_slices(nr.array,
-                                    slices_and_not(mcp.get_slices(),
-                                                   autorotation.get_slices()),
-                                    min_value)
-
-
-class RotorSpeed36To49Duration(KeyPointValueNode):
-    '''
-    Duration in which rotor speed in running between 36% and 49%.
-    '''
-
-    units = ut.SECOND
-
-    @classmethod
-    # This KPV is specific to the S92 helicopter
-    def can_operate(cls, available, ac_type=A('Aircraft Type'),
-                    family=A('Family')):
-        is_s92 = ac_type == helicopter and family and family.value == 'S92'
-        return is_s92 and all_deps(cls, available)
-
-    def derive(self, nr=P('Nr')):
-        self.create_kpvs_from_slice_durations(
-            slices_between(nr.array, 36, 49)[1], nr.frequency)
-
-
-class RotorSpeed56To67Duration(KeyPointValueNode):
-    '''
-    Duration in which rotor speed in running between 56% and 67%.
-    '''
-
-    units = ut.SECOND
-
-    @classmethod
-    # This KPV is specific to the S92 helicopter
-    def can_operate(cls, available, ac_type=A('Aircraft Type'),
-                    family=A('Family')):
-        is_s92 = ac_type == helicopter and family and family.value == 'S92'
-        return is_s92 and all_deps(cls, available)
-
-    def derive(self, nr=P('Nr')):
-        self.create_kpvs_from_slice_durations(
-            slices_between(nr.array, 56, 67)[1], nr.frequency)
-
-
-class RotorSpeedAt6PercentCollectiveDuringEngStart(KeyPointValueNode):
-    '''
-    During the engines starting the collective the needs to be high, but as the
-    rotor speed starts to increase the colective needs to be lowered. This KPV
-    records the value Nr when the collective is fully lowered (<6% collective).
-    '''
-
-    units = ut.PERCENT
-
-    @classmethod
-    # This KPV is specific to the S92 helicopter
-    def can_operate(cls, available, ac_type=A('Aircraft Type'),
-                    family=A('Family')):
-        is_s92 = ac_type == helicopter and family and family.value == 'S92'
-        return is_s92 and all_deps(cls, available)
-
-    def derive(self, nr=P('Nr'), collective=P('Collective'),
-               firsts=KTI('First Eng Fuel Flow Start')):
-        for first in firsts:
-            if value_at_index(collective.array, first.index) > 50:
-                # ensure we are looking at rotor start and not rotors already
-                # running at start of data
-                index = index_at_value(collective.array, 6,
-                                             slice(first.index, None))
-                value = value_at_index(nr.array, index)
-                self.create_kpv(index, value)
-            else:
-                continue
 
 
 ##############################################################################
@@ -17960,7 +16655,7 @@ class TailwindDuringTakeoffMax(KeyPointValueNode):
 
         for toff in toff_windows:
             spd = np.ma.masked_less(airspeed.array, 60)
-            first_spd_idx = first_valid_sample(spd[toff])[0]
+            first_spd_idx = first_valid_sample(spd[slices_int(toff)])[0]
 
             if first_spd_idx:
                 first_spd_idx = first_spd_idx + toff.start
@@ -18802,10 +17497,10 @@ class TCASRAReactionDelay(KeyPointValueNode):
                         to_scan = slice(tcas_ta.slice.start, tcas_ra.slice.stop)
                         found = True
 
-            if np.ma.count(acc.array[to_scan]) == 0:
+            if np.ma.count(acc.array[slices_int(to_scan)]) == 0:
                 continue
             # Work out the scatter of acceleration data prior to any pilot input
-            before_scan = slice(max(0, to_scan.start - 20 * acc.frequency), to_scan.start)
+            before_scan = slices_int(max(0, to_scan.start - 20 * acc.frequency), to_scan.start)
             std_limit = 3.0 * np.ma.std(acc.array[before_scan])
 
             react_index = index_at_value(np.ma.abs(acc.array - 1.0),
@@ -18853,12 +17548,12 @@ class TCASRAAcceleration(KeyPointValueNode):
                 if is_index_within_slice(tcas_dir.index, to_scan):
                     direction = tcas_dir.value
                     if direction == 0:
-                        index = np.ma.argmax(np.ma.abs(acc.array[to_scan])) + to_scan.start
+                        index = np.ma.argmax(np.ma.abs(acc.array[slices_int(to_scan)])) + to_scan.start
                     elif direction == +1:
-                        index = np.ma.argmax(acc.array[to_scan]) + to_scan.start
+                        index = np.ma.argmax(acc.array[slices_int(to_scan)]) + to_scan.start
                     elif direction == -1:
-                        index = np.ma.argmin(acc.array[to_scan]) + to_scan.start
-                    self.create_kpv(index, acc.array[index] - 1.0)
+                        index = np.ma.argmin(acc.array[slices_int(to_scan)]) + to_scan.start
+                    self.create_kpv(index, acc.array[int(index)] - 1.0)
 
 
 class TCASRAChangeOfVerticalSpeed(KeyPointValueNode):
@@ -18894,7 +17589,6 @@ class TCASRAAPDisengaged(KeyPointValueNode):
     '''
 
     name = 'TCAS RA AP Disengaged'
-    # units = ut.LOGICAL
 
     @classmethod
     def can_operate(cls, available):
@@ -19008,15 +17702,15 @@ class TCASRAErroneousAcceleration(KeyPointValueNode):
                         to_scan = slice(to_scan.start, tcas_ra_acc.index)
                         continue
 
-            if direction == 0:
+            if direction == 0 or slice_duration(to_scan, 1) == 0.0:
                 continue
                 ## To monitor accelerations that are larger than threshold...
                 ## peak_index = np.ma.argmax(np.ma.abs(acc.array[to_scan] - 1.0)) + to_scan.start
             else:
-                peak_index = np.ma.argmin(acc.array[to_scan] * direction) + to_scan.start
-            peak = acc.array[peak_index] - 1.0
+                peak_index = np.ma.argmin(acc.array[slices_int(to_scan)] * direction) + to_scan.start
+            peak = acc.array[int(peak_index)] - 1.0
             # Work out the scatter of acceleration data prior to any pilot input
-            before_scan = slice(max(0, to_scan.start - 20 * acc.frequency), to_scan.start)
+            before_scan = slices_int(max(0, to_scan.start - 20 * acc.frequency), to_scan.start)
             std_limit = 3.0 * np.ma.std(acc.array[before_scan])
 
             if abs(peak) > max(std_limit, TCAS_THRESHOLD):
@@ -19045,10 +17739,6 @@ class TCASRASubsequentAcceleration(KeyPointValueNode):
 
         rates = [rate_1, rate_2, rate_3, rate_4]
         rate = next((item for item in rates if item is not None), None)
-        if rate:
-            array = rate.array
-        else:
-            array = tcas_cc.array.data
 
         for tcas_ra in tcas_ras:
             # For the data of interest, ediff1d finds the changes, nonzero picks the first non-zero change and
@@ -19577,6 +18267,26 @@ class SmokeWarningDuration(KeyPointValueNode):
 
 
 ##############################################################################
+# Warnings: Smoke and Fire
+
+
+class CargoSmokeOrFireWarningDuration(KeyPointValueNode):
+    '''
+    Duration that any of the cargo smoke or fire warnings are active.
+    '''
+
+    units = ut.SECOND
+
+    @classmethod
+    def can_operate(cls, available):
+        return all_of(('Cargo (*) Smoke Or Fire', 'Airborne'), available)
+
+    def derive(self, c_smoke_fire=M('Cargo (*) Smoke Or Fire'), airborne=S('Airborne')):
+
+        self.create_kpvs_where(c_smoke_fire.array == 'Warning', c_smoke_fire.hz, phase=airborne)
+
+
+##############################################################################
 # Throttle
 
 
@@ -19809,10 +18519,10 @@ class TouchdownToElevatorDownDuration(KeyPointValueNode):
                     self.create_kpv(index_elev, t_14)
 
                 else:
-                    index_min = tdwn.index + np.ma.argmin(elevator.array[to_scan])
+                    index_min = tdwn.index + np.ma.argmin(elevator.array[slices_int(to_scan)])
                     if index_min > tdwn.index + 2:
                         # Worth having a look
-                        if np.ma.ptp(elevator.array[tdwn.index:index_min]) > 10.0:
+                        if np.ma.ptp(elevator.array[slices_int(tdwn.index, index_min)]) > 10.0:
                             t_min = (index_min - tdwn.index) / elevator.frequency
                             self.create_kpv(index_min, t_min)
                     else:
@@ -19999,36 +18709,32 @@ class WindAcrossLandingRunwayAt50Ft(KeyPointValueNode):
                 self.create_kpv(index, value)
 
 
-class WindSpeedInCriticalAzimuth(KeyPointValueNode):
+class TailwindAtAltitudeDuringDescent(KeyPointValueNode):
     '''
-    Maximum relative windspeed when wind blowing into tail rotor.
-    The critical direction is helicopter type-specific.
+    Tailwind component at various altitudes (all AAL) during descent.
     '''
 
-    align_frequency = 2
+    NAME_FORMAT = 'Tailwind At %(altitude)d Ft During Descent'
+    NAME_VALUES = {'altitude': [2000, 1500, 1000, 500, 100, 50]}
     units = ut.KT
 
-    can_operate = helicopter_only
+    def derive(self,
+               alt_aal=P('Altitude AAL For Flight Phases'),
+               tailwind=P('Tailwind')):
+        '''
+        Note: We align to Altitude AAL for cosmetic reasons; alignment to
+          tailwind leads to slightly misaligned KPVs for tailwind, which looks
+          wrong although is arithmetically "correct".
+        '''
 
-    def derive(self, wind_spd=P('Wind Speed'), wind_dir=P('Wind Direction'),
-               tas=P('Airspeed True'), heading=P('Heading'),
-               airborne=S('Airborne')):
-
-        # Puma AS330 critical arc is the port quarter
-        min_arc = 180
-        max_arc = 270
-
-        rad_scale = np.radians(1.0)
-        headwind = tas.array + wind_spd.array * np.ma.cos((wind_dir.array-heading.array)*rad_scale)
-        sidewind = wind_spd.array * np.ma.sin((wind_dir.array-heading.array)*rad_scale)
-
-        app_dir = np.arctan2(sidewind, headwind)/rad_scale%360
-        critical_dir = np.ma.masked_outside(app_dir, min_arc, max_arc)
-        app_speed = np.ma.sqrt(sidewind*sidewind + headwind*headwind)
-        critical_speed = np.ma.array(data=app_speed.data, mask=critical_dir.mask)
-
-        self.create_kpvs_within_slices(critical_speed, airborne, max_value)
-
+        for descent in alt_aal.slices_from_to(2100, 0):
+            for altitude in self.NAME_VALUES['altitude']:
+                index = index_at_value(alt_aal.array, altitude, descent)
+                if not index:
+                    continue
+                value = value_at_index(tailwind.array, index)
+                if value:
+                    self.create_kpv(index, value, altitude=altitude)
 
 
 ##############################################################################
@@ -20396,6 +19102,85 @@ class DualInputByFOMax(KeyPointValueNode):
         )
 
 
+class ControlColumnDualInputOppositeDirectionForceMax(KeyPointValueNode):
+    '''
+    AE-2115 ATR 72 specific KPV, created in accordance with ATRs specification to monitor for opposite dual input on
+    the elevator axis as it might lead to pitch disconnect events.
+
+    The parameter uses Control Column Force At Control Wheel parameters, which are derived in accordance with ATR's
+    guidelines.
+
+    ATR's criteria:
+    - remove offset
+    - effort has to be greater than 20N
+    - for at least 0.5s
+    - monitoring window of 5s
+
+    We only look for opposite direction dual input.
+    '''
+
+    units = ut.DECANEWTON
+
+    @classmethod
+    def can_operate(cls, available, family=A('Family')):
+        is_atr = family and family.value in ('ATR-72')
+        return all_of(('Control Column Force At Control Wheel (Capt)', 'Control Column Force At Control Wheel (FO)'), available) and is_atr
+
+    def derive(self,
+               force_capt=P('Control Column Force At Control Wheel (Capt)'),
+               force_fo=P('Control Column Force At Control Wheel (FO)'),
+               taxiing=S('Taxiing'),
+               turns=S('Turning On Ground'), ):
+
+        # find offset during taxi in straight line
+        if taxiing and turns:
+            straights = slices_and([s.slice for s in taxiing],
+                                   slices_not([s.slice for s in turns]), )
+            unmasked_capt = np.ma.compressed(np.ma.concatenate([force_capt.array[s] for s in straights]))
+            unmasked_fo = np.ma.compressed(np.ma.concatenate([force_fo.array[s] for s in straights]))
+            delta_capt = np.ma.average(unmasked_capt) if len(unmasked_capt) > 20 else 0
+            delta_fo = np.ma.average(unmasked_fo) if len(unmasked_fo) > 20 else 0
+            # if unable just assume that there's no offset
+        else:
+            delta_capt = delta_fo = 0
+
+        # remove offset
+        capt_offset_removed = force_capt.array - delta_capt
+        fo_offset_removed = force_fo.array - delta_fo
+
+        # effort required to trigger the event: both >20N = 2dN/kgF
+        dual_slices = slices_and(runs_of_ones(np.ma.abs(capt_offset_removed) > 2), runs_of_ones(np.ma.abs(fo_offset_removed) > 2))
+
+        #for at least 0.5s
+        dual_slices = slices_remove_small_slices(dual_slices, time_limit=0.5, hz=self.hz)
+
+        # end of monitoring window: 5s below 20N
+        dual_slices = slices_remove_small_gaps(dual_slices, time_limit=5, hz=self.hz)
+
+
+        for s in dual_slices:
+            # identify max force diff in section, along with its index
+            section_diff = capt_offset_removed[s] - fo_offset_removed[s]
+            max_diff_in_section = np.ma.max(np.ma.abs(section_diff))
+            index = s.start + np.ma.argmax(section_diff)
+
+            # find max force on Captain's and FO's CCs
+            max_capt_in_section = np.ma.abs(np.ma.max(capt_offset_removed))
+            max_fo_in_section = np.ma.abs(np.ma.max(fo_offset_removed))
+
+            # we're only interested in dual input in opposite directions, so check that the difference is greater than both forces
+            if max_diff_in_section > max_capt_in_section and max_diff_in_section > max_fo_in_section:
+                self.create_kpv(index, max_diff_in_section)
+
+
+class PitchDisconnectDuration(KeyPointValueNode):
+
+    unit = ut.SECOND
+
+    def derive(self, pitch_disconnect=M('Pitch Disconnect'),):
+        self.create_kpvs_where(pitch_disconnect.array == 'Disconnect')
+
+
 ##############################################################################
 
 
@@ -20602,6 +19387,8 @@ class TakeoffRatingDuration(KeyPointValueNode):
     of the takeoff roll and 5 minutes after.
     '''
 
+    units = ut.SECOND
+
     def derive(self, toffs=S('Takeoff 5 Min Rating')):
         '''
         '''
@@ -20627,136 +19414,10 @@ class SATMax(KeyPointValueNode):
         self.create_kpv(*max_value(sat.array))
 
 
-class SATMin(KeyPointValueNode):
-    '''
-    Minimum recorded SAT.
-    '''
-
-    name = 'SAT Min'
-    units = ut.CELSIUS
-
-    can_operate = helicopter_only
-
-    def derive(self,
-               sat=P('SAT'),
-               family=A('Family'),
-               rotors_turning=S('Rotors Turning')):
-
-        if family and family.value == 'S92':
-            self.create_kpvs_within_slices(sat.array, rotors_turning, min_value)
-        else:
-            self.create_kpv(*min_value(sat.array))
-
-
-class SATRateOfChangeMax(KeyPointValueNode):
-    '''
-    Peak rate of increase of SAT - specific to offshore helicopter operations to detect
-    transit though gas plumes.
-    '''
-
-    name = 'SAT Rate Of Change Max'
-    units = ut.CELSIUS
-
-    can_operate = helicopter_only
-
-    def derive(self, sat=P('SAT'), airborne=S('Airborne')):
-        width = None if sat.frequency <= 0.25 else 4
-        sat_roc = rate_of_change_array(sat.array, sat.frequency, width=width)
-        self.create_kpv_from_slices(sat_roc, airborne, max_value)
-
-
-##############################################################################
-# Cruise Guide Indicator
-class CruiseGuideIndicatorMax(KeyPointValueNode):
-    '''
-    Maximum CGI reading throughtout the whole record. (helicopter only)
-    '''
-    units = ut.PERCENT
-
-    can_operate = helicopter_only
-
-    def derive(self, cgi=P('Cruise Guide'), airborne=S('Airborne')):
-        self.create_kpv_from_slices(cgi.array, airborne, max_abs_value)
-
-
-##############################################################################
-# Training Mode
-class TrainingModeDuration(KeyPointValueNode):
-    '''
-    Specific to the S92 helicopter, FADEC training mode used.
-    '''
-
-    units = ut.SECOND
-
-    @classmethod
-    def can_operate(cls, available):
-        # S92A case
-        if ('Training Mode' in available) and \
-           not(any_of(('Eng (1) Training Mode', 'Eng (2) Training Mode'), available)):
-            return True
-        # H225 case
-        elif all_of(('Eng (1) Training Mode', 'Eng (2) Training Mode'), available) and \
-            ('Training Mode' not in available) :
-            return True
-        # No other cases operational yet.
-        else:
-            return False
-
-    def derive(self, trg=P('Training Mode'),
-               trg1=P('Eng (1) Training Mode'),
-               trg2=P('Eng (2) Training Mode'),
-               ):
-
-        # S92A case
-        if trg:
-            trg_slices = runs_of_ones(trg.array)
-            frequency = trg.frequency
-        else:
-            # H225 case
-            trg_slices = slices_or(runs_of_ones(trg1.array), runs_of_ones(trg2.array))
-            frequency = trg1.frequency
-
-        self.create_kpvs_from_slice_durations(trg_slices,
-                                              frequency,
-                                              min_duration=2.0,
-                                              mark='start')
-
-##############################################################################
-# Hover height
-class HoverHeightDuringOnshoreTakeoffMax(KeyPointValueNode):
-    '''
-    Maximum hover height, to monitor for safe hover operation.
-    '''
-
-    units = ut.FT
-
-    can_operate = helicopter_only
-
-    def derive(self, rad_alt=P('Altitude Radio'), offshore=M('Offshore'), hover=S('Hover'), toff=S('Takeoff')):
-        phases = slices_and(runs_of_ones(offshore.array == 'Onshore'), hover.get_slices())
-        for phase in phases:
-            if toff.get(within_slice=phase, within_use='any'):
-                self.create_kpvs_within_slices(rad_alt.array, [phase], max_value)
-
-
-class HoverHeightDuringOffshoreTakeoffMax(KeyPointValueNode):
-    '''
-    Maximum hover height, to monitor for safe hover operation.
-    '''
-
-    units = ut.FT
-
-    can_operate = helicopter_only
-
-    def derive(self, rad_alt=P('Altitude Radio'), offshore=M('Offshore'), hover=S('Hover'), toff=S('Takeoff')):
-        phases = slices_and(runs_of_ones(offshore.array == 'Offshore'), hover.get_slices())
-        for phase in phases:
-            if toff.get(within_slice=phase, within_use='any'):
-                self.create_kpvs_within_slices(rad_alt.array, [phase], max_value)
-
 
 ##############################################################################
 # Drift
+
 class DriftAtTouchdown(KeyPointValueNode):
     '''
     Returns the value of drift at touchdown.
@@ -20788,7 +19449,7 @@ class EngN1TakeoffDerate(KeyPointValueNode):
                sage_toffs=KTI('SAGE Takeoff')):
 
         for toff in sage_toffs:
-            index = toff.index
+            index = int(toff.index)
             if mach.array[index] > 0.3:
                 # takeoff point mis-identified; ignore
                 continue
@@ -20799,7 +19460,7 @@ class EngN1TakeoffDerate(KeyPointValueNode):
             theta = (tat.array[index] + 273.15) / 288.15
             corr_n1 = n1 / np.sqrt(theta)
             derate = 100.0 - corr_n1
-            self.create_kpv(index, derate)
+            self.create_kpv(toff.index, derate)
 
 
 class EngThrustTakeoffDerate(KeyPointValueNode):
@@ -20822,13 +19483,12 @@ class EngThrustTakeoffDerate(KeyPointValueNode):
             return fnk
 
         for n1 in n1_derates:
-            index = n1.index
             corr_n1 = 100.0 - n1.value
-            mach_toff = mach.array[index]
+            mach_toff = mach.array[int(n1.index)]
             fnk_90 = corrected_parameter_power_management(90.0, mach_toff)
             fnk = corrected_parameter_power_management(corr_n1, mach_toff)
             derate = 100.0 * (1.0 - fnk / fnk_90)
-            self.create_kpv(index, derate)
+            self.create_kpv(n1.index, derate)
 
 
 class EngTakeoffFlexTemp(KeyPointValueNode):
@@ -20851,7 +19511,7 @@ class EngTakeoffFlexTemp(KeyPointValueNode):
             self.create_kpvs_at_ktis(flex.array, sage_toffs)
         elif flex_1 and flex_2:
             for toff in sage_toffs:
-                index = toff.index
+                index = int(toff.index)
                 value = (flex_1.array[index] + flex_2.array[index]) / 2.0
                 self.create_kpv(index, value)
 
@@ -20877,7 +19537,7 @@ class EngNpMaxDuringTakeoff(KeyPointValueNode):
         hz = eng_np_max.frequency
         for duration in self.NAME_VALUES['seconds']:
             for takeoff in takeoffs.get_slices():
-                arrays = eng_np_max.array[takeoff]
+                arrays = eng_np_max.array[slices_int(takeoff)]
                 if len(arrays) > 0:
                     index, value = max_maintained_value(arrays, duration, hz, takeoff)
                     if index is not None and value is not None:
@@ -20886,7 +19546,7 @@ class EngNpMaxDuringTakeoff(KeyPointValueNode):
         if go_arounds:
             for duration in self.NAME_VALUES['seconds']:
                 for go_around in go_arounds.get_slices():
-                    arrays = eng_np_max.array[go_around]
+                    arrays = eng_np_max.array[slices_int(go_around)]
                     if len(arrays) > 0:
                         index, value = max_maintained_value(arrays, duration, hz, go_around)
                         if index is not None and value is not None:
@@ -20915,7 +19575,7 @@ class EngTorqueMaxDuringTakeoff(KeyPointValueNode):
         seconds = np.array([10, 20, 300])
         for samples, duration in zip(seconds, self.NAME_VALUES['durations']):
             for takeoff in takeoffs.get_slices():
-                arrays = eng_torq_max.array[takeoff]
+                arrays = eng_torq_max.array[slices_int(takeoff)]
                 if len(arrays) > 0:
                     index, value = max_maintained_value(arrays, samples, hz, takeoff)
                     if index is not None and value is not None:
@@ -20923,7 +19583,7 @@ class EngTorqueMaxDuringTakeoff(KeyPointValueNode):
         if go_arounds:
             for samples, duration in zip(seconds, self.NAME_VALUES['durations']):
                 for go_around in go_arounds.get_slices():
-                    arrays = eng_torq_max.array[go_around]
+                    arrays = eng_torq_max.array[slices_int(go_around)]
                     if len(arrays) > 0:
                         index, value = max_maintained_value(arrays, samples, hz, go_around)
                         if index is not None and value is not None:
@@ -20951,7 +19611,7 @@ class EngTorqueMaxDuringMaximumContinuousPower(KeyPointValueNode):
         seconds = np.array([10, 20, 300, 600])
         for samples, duration in zip(seconds, self.NAME_VALUES['durations']):
             for mcp in ratings.get_slices():
-                arrays = eng_torq_max.array[mcp]
+                arrays = eng_torq_max.array[slices_int(mcp)]
                 if len(arrays) > 0:
                     index, value = max_maintained_value(arrays, samples, hz, mcp)
                     if index is not None and value is not None:
@@ -20978,7 +19638,7 @@ class EngN2DuringTakeoffForXSecMax(KeyPointValueNode):
 
         seconds = np.array([10, 20, 300])
         for samples, duration in zip(seconds, self.NAME_VALUES['durations']):
-            for takeoff in takeoffs.get_slices():
+            for takeoff in slices_int(takeoffs.get_slices()):
                 arrays = eng_n2_max.array[takeoff]
                 if len(arrays) > 0:
                     index, value = max_maintained_value(arrays, samples, eng_n2_max.hz, takeoff)
@@ -20986,7 +19646,7 @@ class EngN2DuringTakeoffForXSecMax(KeyPointValueNode):
                         self.create_kpv(index, value, durations=duration)
         if go_arounds:
             for samples, duration in zip(seconds, self.NAME_VALUES['durations']):
-                for go_around in go_arounds.get_slices():
+                for go_around in slices_int(go_arounds.get_slices()):
                     arrays = eng_n2_max.array[go_around]
                     if len(arrays) > 0:
                         index, value = max_maintained_value(arrays, samples, eng_n2_max.hz, go_around)
@@ -21014,7 +19674,7 @@ class EngN2DuringMaximumContinuousPowerForXSecMax(KeyPointValueNode):
 
         seconds = np.array([10, 20, 300, 600])
         for samples, duration in zip(seconds, self.NAME_VALUES['durations']):
-            for mcp in ratings.get_slices():
+            for mcp in slices_int(ratings.get_slices()):
                 arrays = eng_n2_max.array[mcp]
                 if len(arrays) > 0:
                     index, value = max_maintained_value(arrays, samples, eng_n2_max.hz, mcp)
@@ -21053,15 +19713,13 @@ class DHSelectedAt1500FtLVO(KeyPointValueNode):
 
     @classmethod
     def can_operate(cls, available, series=A('Series')):
-        if not series or series.value not in ('Falcon-7X', 'Falcon-8X'):
+        if not series or series.value not in ('Falcon-7X', 'Falcon-8X', 'Falcon-2000'):
             return False
-        return all_of(('Altitude AAL', 'DH Selected'), available)
+        return all_of(('Altitude When Descending', 'DH Selected'), available)
 
-    def derive(self, alt_aal=P('Altitude AAL'), dh_selected=P('DH Selected'),
-               descents=S('Descent')):
+    def derive(self, alt_descending=KTI('Altitude When Descending'),
+               dh_selected=P('DH Selected')):
 
-        for descent in descents:
-            alt_aal_array = mask_outside_slices(alt_aal.array, [descent.slice])
-            approach_index = np.ma.argmax(alt_aal_array <= 1500)
-
-            self.create_kpv(approach_index, dh_selected.at(approach_index))
+        self.create_kpvs_at_ktis(dh_selected.array,
+                                 alt_descending.get(name='1500 Ft Descending'),
+                                 suppress_zeros=True)

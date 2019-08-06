@@ -16,6 +16,7 @@ from analysis_engine.split_hdf_to_segments import (
     append_segment_info,
     calculate_fallback_dt,
     get_dt_arrays,
+    get_valid_dt_slices,
     has_constant_time,
     split_segments,
     PRECISE
@@ -30,6 +31,10 @@ from flightdatautilities.filesystem_tools import copy_file
 test_data_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                               'test_data')
 this_year = datetime.now().year
+
+
+def load_array(filename):
+    return load_compressed(os.path.join(test_data_path, filename))
 
 
 class MockHDF(dict):
@@ -59,11 +64,11 @@ class TestDateTimeFunctions(unittest.TestCase):
         hdf = mocked_hdf()('slow')
         dt = datetime(2012, 12, 12, 12, 13, 2, tzinfo=pytz.utc)
         # test no change
-        new_dt = calculate_fallback_dt(hdf, datetime(2012, 12, 12, 12, 13, 2, tzinfo=pytz.utc), 
+        new_dt = calculate_fallback_dt(hdf, datetime(2012, 12, 12, 12, 13, 2, tzinfo=pytz.utc),
                                        datetime(2012, 12, 12, 12, 13, 2, tzinfo=pytz.utc), True)
         self.assertEqual(new_dt, dt)
         # test 50 seconds (duration) earlier as relative to end
-        new_dt = calculate_fallback_dt(hdf, datetime(2012, 12, 12, 12, 13, 2, tzinfo=pytz.utc), 
+        new_dt = calculate_fallback_dt(hdf, datetime(2012, 12, 12, 12, 13, 2, tzinfo=pytz.utc),
                                        datetime(2012, 12, 12, 12, 13, 2, tzinfo=pytz.utc), False)
         expected_dt = datetime(2012, 12, 12, 12, 12, 12, tzinfo=pytz.utc)
         self.assertEqual(new_dt, expected_dt)
@@ -85,8 +90,8 @@ class TestDateTimeFunctions(unittest.TestCase):
         month = P('Month', array=np.ma.array([8]*duration))
         day = P('Day', array=np.ma.array([5]*duration))
         hour = P('Hour', array=np.ma.array([0]*duration))
-        minute = P('Minute', array=np.ma.repeat(np.ma.arange(duration/60), 60))
-        second = P('Second', array=np.ma.array(np.tile(np.arange(60), duration/60)))
+        minute = P('Minute', array=np.ma.repeat(np.ma.arange(duration//60), 60))
+        second = P('Second', array=np.ma.array(np.tile(np.arange(60), duration//60)))
         values = {'Year': year, 'Month': month, 'Day': day, 'Hour': hour, 'Minute': minute, 'Second': second}
         def hdf_get(arg):
             return values[arg]
@@ -97,6 +102,120 @@ class TestDateTimeFunctions(unittest.TestCase):
         self.assertEqual(dt_arrays, [year.array, month.array, day.array, hour.array, minute.array, second.array])
         self.assertTrue(precise_timestamp)
         self.assertTrue([p for p in dt_param_state.values() if p != PRECISE] == [])
+
+    def test_get_dt_arrays__valid_slices(self):
+        duration = 3599
+        year = P('Year', array=np.ma.array([2019]*duration))
+        month = P('Month', array=np.ma.array([2]*duration))
+        day = P('Day', array=np.ma.array([1]*duration))
+        hour = P('Hour', array=np.ma.array([0]*duration))
+        minute = P('Minute', array=np.ma.repeat(np.ma.arange(duration//60), 61)[:duration])
+        second = P('Second', array=np.ma.array(np.tile(np.arange(60), duration//59))[:duration])
+        values = {'Year': year, 'Month': month, 'Day': day, 'Hour': hour, 'Minute': minute, 'Second': second}
+
+        def hdf_get(arg):
+            return values[arg]
+
+        hdf = mock.Mock()
+        hdf.duration = duration
+        hdf.get.side_effect = hdf_get
+        dt_arrays, precise_timestamp, dt_param_state = get_dt_arrays(hdf, datetime(2019, 1, 31, 13, 50, 40),
+                                                                     datetime(2019, 2, 1, 1, 59, 59),
+                                                                     valid_slices=[slice(150, 1000), slice(1500, 3000)])
+
+        self.assertTrue(len(dt_arrays[0]) == len(dt_arrays[1]) == len(dt_arrays[2]) == \
+                        len(dt_arrays[3]) == len(dt_arrays[4]) == len(dt_arrays[5]) == duration)
+
+    def test_get_valid_dt_slices_all_unmasked(self):
+
+        def hdf_get(key):
+            return Parameter(key, array=arrays[key], frequency=1)
+
+        hdf = mock.Mock()
+        hdf.get = mock.Mock()
+        hdf.get.side_effect = hdf_get
+
+        arrays = {
+            'Airspeed': load_array('airspeed_sample.npz'),
+        }
+
+        valid_dt_slices = get_valid_dt_slices(hdf)
+
+        self.assertEqual(valid_dt_slices[0].start, 0)
+        self.assertEqual(valid_dt_slices[0].stop, 41396)
+
+    def test_get_valid_dt_slices_some_masked(self):
+
+        def hdf_get(key):
+            return Parameter(key, array=arrays[key], frequency=1)
+
+        hdf = mock.Mock()
+        hdf.get = mock.Mock()
+        hdf.get.side_effect = hdf_get
+
+        arrays = {
+            'Airspeed': load_array('airspeed_sample_masked_under_80.npz'),
+        }
+
+        valid_dt_slices = get_valid_dt_slices(hdf)
+
+        self.assertEqual(valid_dt_slices[0].start, 412)
+        self.assertEqual(valid_dt_slices[0].stop, 1911)
+        self.assertEqual(valid_dt_slices[1].start, 3204)
+        self.assertEqual(valid_dt_slices[1].stop, 8551)
+        self.assertEqual(valid_dt_slices[2].start, 9355)
+        self.assertEqual(valid_dt_slices[2].stop, 14771)
+        self.assertEqual(valid_dt_slices[3].start, 15969)
+        self.assertEqual(valid_dt_slices[3].stop, 21434)
+        self.assertEqual(valid_dt_slices[4].start, 22135)
+        self.assertEqual(valid_dt_slices[4].stop, 27047)
+        self.assertEqual(valid_dt_slices[5].start, 28413)
+        self.assertEqual(valid_dt_slices[5].stop, 33427)
+        self.assertEqual(valid_dt_slices[6].start, 34775)
+        self.assertEqual(valid_dt_slices[6].stop, 40832)
+
+    def test_get_valid_dt_slices_all_masked(self):
+
+        def hdf_get(key):
+            return Parameter(key, array=arrays[key], frequency=1)
+
+        hdf = mock.Mock()
+        hdf.get = mock.Mock()
+        hdf.get.side_effect = hdf_get
+
+        arrays = {
+            'Airspeed': load_array('airspeed_sample_all_masked.npz'),
+        }
+
+        valid_dt_slices = get_valid_dt_slices(hdf)
+
+        self.assertEqual(valid_dt_slices, [])
+
+    def test_calculate_start_datetime_multiple_valid_slices(self):
+        aspd = load_array('airspeed_sample_masked_under_80.npz')
+        duration = len(aspd)
+
+        airspeed = P('Airspeed', array=aspd)
+        year = P('Year', array=np.ma.array([2019]*duration))
+        month = P('Month', array=np.ma.array([2]*duration))
+        day = P('Day', array=np.ma.array([1]*duration))
+        hour = P('Hour', array=np.ma.array([0]*duration))
+        minute = P('Minute', array=np.ma.repeat(np.ma.arange(duration//60), 61)[:duration])
+        second = P('Second', array=np.ma.array(np.tile(np.arange(60), duration//59))[:duration])
+        values = {'Year': year, 'Month': month, 'Day': day, 'Hour': hour, 'Minute': minute, 'Second': second, 'Airspeed': airspeed}
+
+        def hdf_get(arg):
+            return values[arg]
+
+        hdf = mock.Mock()
+        hdf.duration = duration
+        hdf.get = mock.Mock()
+        hdf.get.side_effect = hdf_get
+        start_dt = datetime(2019, 2, 1, 0, 0, tzinfo=pytz.utc)
+        new_dt, _precise_timestamp, _conf = _calculate_start_datetime(hdf, datetime(2019, 2, 2, 0, 1, 1, tzinfo=pytz.utc),
+                                           datetime(2012, 2, 2, 1, 2, 2, tzinfo=pytz.utc))
+
+        self.assertEqual(new_dt, start_dt)
 
 
 class TestSplitSegments(unittest.TestCase):
@@ -143,7 +262,7 @@ class TestSplitSegments(unittest.TestCase):
             elif key == 'Segment Split':
                 seg_split = M('Segment Split', array=np.ma.zeros(len(heading_array), dtype=int),
                                  frequency=heading_frequency, values_mapping={0: "-", 1: "Split"})
-                seg_split.array[390/heading_frequency] = "Split"
+                seg_split.array[390//heading_frequency] = "Split"
                 return seg_split
             else:
                 raise KeyError
@@ -210,8 +329,8 @@ class TestSplitSegments(unittest.TestCase):
                                             np.arange(0, 200, 0.5),
                                             np.arange(200, 0, -0.5)])
         airspeed_secs = len(airspeed_array) / airspeed_frequency
-        heading_array = np.ma.concatenate((np.arange(len(airspeed_array) / 4, dtype=float) % 360,
-                                           np.zeros(len(airspeed_array) / 4)))
+        heading_array = np.ma.concatenate((np.arange(len(airspeed_array) // 4, dtype=float) % 360,
+                                           np.zeros(len(airspeed_array) // 4)))
 
         # DFC jumps exactly half way.
         dfc_array = np.ma.concatenate([np.arange(0, 100),
@@ -392,7 +511,6 @@ class TestSplitSegments(unittest.TestCase):
         hdf_path = os.path.join(test_data_path, "split_segments_1.hdf5")
         temp_path = copy_file(hdf_path)
         hdf = hdf_file(temp_path)
-
         segment_tuples = split_segments(hdf, {})
         self.assertEqual(segment_tuples,
                          [('START_AND_STOP', slice(0, 9952.0, None), 0),
@@ -424,6 +542,10 @@ class TestSplitSegments(unittest.TestCase):
         hdf = hdf_file(temp_path)
 
         segment_tuples = split_segments(hdf, {})
+
+        #for a, e in zip(segment_tuples, expected):
+            #print(a,e,a==e)
+
         self.assertEqual(segment_tuples,
                          [('START_AND_STOP', slice(0, 3989.0, None), 0),
                           ('START_AND_STOP', slice(3989.0, 7049.0, None), 1),
@@ -526,12 +648,9 @@ class TestSplitSegments(unittest.TestCase):
         hdf.reliable_frame_counter = False
 
         arrays = {
-            'Eng (1) N1': load_compressed(os.path.join(
-                test_data_path, 'split_segments_eng_1_n1_slowslice.npz')),
-            'Eng (2) N1': load_compressed(os.path.join(
-                test_data_path, 'split_segments_eng_2_n1_slowslice.npz')),
-            'Groundspeed': load_compressed(os.path.join(
-                test_data_path, 'split_segments_groundspeed_slowslice.npz'))
+            'Eng (1) N1': load_array('split_segments_eng_1_n1_slowslice.npz'),
+            'Eng (2) N1': load_array('split_segments_eng_2_n1_slowslice.npz'),
+            'Groundspeed': load_array('split_segments_groundspeed_slowslice.npz'),
         }
 
         def hdf_getitem(self, key, **kwargs):
@@ -556,8 +675,7 @@ class mocked_hdf(object):
         if path == 'slow':
             self.airspeed = np.ma.arange(10, 20).repeat(5)
         else:
-            self.airspeed = np.ma.array(
-                load_compressed(os.path.join(test_data_path, 'airspeed_sample.npz')))
+            self.airspeed = np.ma.array(load_array('airspeed_sample.npz'))
         self.duration = len(self.airspeed)
         return self
 
@@ -818,19 +936,19 @@ class TestSegmentInfo(unittest.TestCase):
 
 
 class TestSegmentTypeAndSlice(unittest.TestCase):
-    
+
     def test_segment_type_and_slice_1(self):
         # Unmasked fast Airspeed at the beginning of the data which is difficult
         # to validate should be ignored in segment type identification.
-        speed_array = load_compressed(os.path.join(test_data_path, 'segment_type_and_slice_1_speed.npz'))
-        heading_array = load_compressed(os.path.join(test_data_path, 'segment_type_and_slice_1_heading.npz'))
-        eng_arrays = load_compressed(os.path.join(test_data_path, 'segment_type_and_slice_1_eng_arrays.npz'))
+        speed_array = load_array('segment_type_and_slice_1_speed.npz')
+        heading_array = load_array('segment_type_and_slice_1_heading.npz')
+        eng_arrays = load_array('segment_type_and_slice_1_eng_arrays.npz')
         aircraft_info = {'Aircraft Type': 'aeroplane'}
         thresholds = {'hash_min_samples': 64, 'speed_threshold': 80, 'min_split_duration': 100, 'min_duration': 180}
         hdf = mock.Mock()
         hdf.superframe_present = False
         segment_type, segment, array_start_secs = _segment_type_and_slice(
-            speed_array, 1, heading_array, 1, 0, 11824, eng_arrays, 
+            speed_array, 1, heading_array, 1, 0, 11824, eng_arrays,
             aircraft_info, thresholds, hdf)
         self.assertEqual(segment_type, 'START_AND_STOP')
         self.assertEqual(segment, slice(0, 11824))
@@ -838,21 +956,42 @@ class TestSegmentTypeAndSlice(unittest.TestCase):
 
     def test_segment_type_and_slice_2(self):
         # Gear on Ground is used instead of Eng (1) Nr
-        speed_array = load_compressed(os.path.join(test_data_path, 'segment_type_and_slice_2_speed.npz'))
-        heading_array = load_compressed(os.path.join(test_data_path, 'segment_type_and_slice_2_heading.npz'))
-        eng_arrays = load_compressed(os.path.join(test_data_path, 'segment_type_and_slice_2_eng_arrays.npz'))
+        speed_array = load_array('segment_type_and_slice_2_speed.npz')
+        heading_array = load_array('segment_type_and_slice_2_heading.npz')
+        eng_arrays = load_array('segment_type_and_slice_2_eng_arrays.npz')
         aircraft_info = {'Aircraft Type': 'helicopter'}
         thresholds = {'hash_min_samples': 64, 'speed_threshold': 90, 'min_split_duration': 100, 'min_duration': 180}
         def get(key):
-            array = load_compressed(os.path.join(
-                test_data_path, 'segment_type_and_slice_2_gog.npz'))
-            return Parameter('Gear on Ground', array=array)
+            if key == 'Gear On Ground':
+                return Parameter('Gear on Ground', array=load_array('segment_type_and_slice_2_gog.npz'))
         hdf = mock.MagicMock()
         hdf.get.side_effect = get
         hdf.superframe_present = False
         segment_type, segment, array_start_secs = _segment_type_and_slice(
-            speed_array, 1, heading_array, 1, 0, 5736, eng_arrays, 
+            speed_array, 1, heading_array, 1, 0, 5736, eng_arrays,
             aircraft_info, thresholds, hdf)
         self.assertEqual(segment_type, 'START_AND_STOP')
         self.assertEqual(segment, slice(0, 5736))
         self.assertEqual(array_start_secs, 0)
+
+    def test_segment_type_and_slice_3(self):
+        # Gear on Ground is used instead of Eng (1) Nr
+        speed_array = load_array('segment_type_and_slice_3_speed.npz')
+        heading_array = load_array('segment_type_and_slice_3_heading.npz')
+        eng_arrays = load_array('segment_type_and_slice_3_eng_arrays.npz')
+        aircraft_info = {'Aircraft Type': 'helicopter'}
+        thresholds = {'hash_min_samples': 64, 'speed_threshold': 90, 'min_split_duration': 100, 'min_duration': 180}
+        def get(key):
+            if key == 'Collective':
+                return Parameter(key, array=load_array('segment_type_and_slice_3_collective.npz'), frequency=8.)
+        hdf = mock.MagicMock()
+        hdf.get.side_effect = get
+        hdf.superframe_present = False
+        segment_type, segment, array_start_secs = _segment_type_and_slice(
+            speed_array, 1, heading_array, 2, 0, 5560, eng_arrays,
+            aircraft_info, thresholds, hdf)
+        self.assertEqual(segment_type, 'START_AND_STOP')
+        self.assertEqual(segment, slice(0, 5560))
+        self.assertEqual(array_start_secs, 0)
+
+

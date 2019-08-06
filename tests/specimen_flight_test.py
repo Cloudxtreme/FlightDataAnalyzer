@@ -18,7 +18,6 @@ from datetime import datetime
 from analysis_engine import hooks, settings
 from analysis_engine.node import (
     ApproachItem,
-    ApproachNode,
     Attribute,
     KeyPointValue,
 )

@@ -884,6 +884,8 @@ class TestSectionNode(unittest.TestCase):
         section_node.create_section(slice(5, 7))
         slices = section_node.get_slices()
         self.assertEqual(slices, [slice(2, 4), slice(5, 7)])
+        slices = section_node.get_slices(within_slice=slice(1, 6))
+        self.assertEqual(slices, [slice(2, 4)])
 
     def test_get_surrounding(self):
         node = SectionNode()
@@ -951,13 +953,14 @@ class TestFormattedNameNode(unittest.TestCase):
                 pass
         formatted_name_node = SpeedInPhaseAtAltitude()
         names = formatted_name_node.names()
-
-        self.assertEqual(names, ['Speed in ascent at 100 ft',
+        # The returned order is different between Python 2 & 3
+        self.assertEqual(sorted(names),
+                         sorted(['Speed in ascent at 100 ft',
                                  'Speed in ascent at 400 ft',
                                  'Speed in ascent at 700 ft',
                                  'Speed in descent at 100 ft',
                                  'Speed in descent at 400 ft',
-                                 'Speed in descent at 700 ft',])
+                                 'Speed in descent at 700 ft',]))
 
     def test__validate_name(self):
         """ Ensures that created names have a validated option
@@ -2022,7 +2025,7 @@ class TestDerivedParameterNode(unittest.TestCase):
         alt_aal = P('Altitude AAL', array)
         tdwns = [KeyTimeInstance(index=34, name='Touchdown')]
         result = alt_aal.slices_to_kti(50, tdwns)
-        self.assertEqual(result, [slice(24, 34)])
+        self.assertEqual(result, [slice(26, 34)])
 
 
     def test_save_and_load_node(self):
