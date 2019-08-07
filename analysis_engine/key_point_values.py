@@ -16293,13 +16293,22 @@ class SpeedbrakeDeployedWithPowerOnDuration(KeyPointValueNode):
 
     The threshold for high power is 60% N1. This aligns with the Airbus AFPS
     and other flight data analysis programmes.
+
+    07 Aug 19 - For the CRJ200ER (CL-600-2B19) the threshold has been revised
+    to 79%.
     '''
 
     units = ut.SECOND
 
-    def derive(self, spd_brk=M('Speedbrake Selected'),
-               power=P('Eng (*) N1 Avg'), alt_aal=S('Altitude AAL For Flight Phases')):
-        power_on_percent = 60.0
+    def derive(self,
+               spd_brk=M('Speedbrake Selected'),
+               power=P('Eng (*) N1 Avg'),
+               alt_aal=S('Altitude AAL For Flight Phases'),
+               model=A('Model')):
+        if model is not None and 'CL-600-2B19' in model.value:
+            power_on_percent = 79.0
+        else:
+            power_on_percent = 60.0
         airborne = np.ma.clump_unmasked(np.ma.masked_less(alt_aal.array, 50))  # only interested when airborne
         for air in airborne:
             spd_brk_dep = spd_brk.array[air] == 'Deployed/Cmd Up'

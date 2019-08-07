@@ -18138,7 +18138,10 @@ class TestSpeedbrakeDeployedWithPowerOnDuration(unittest.TestCase, NodeTest):
 
     def setUp(self):
         self.node_class = SpeedbrakeDeployedWithPowerOnDuration
-        self.operational_combinations = [('Speedbrake Selected', 'Eng (*) N1 Avg', 'Altitude AAL For Flight Phases')]
+        self.operational_combinations = [
+            ('Speedbrake Selected', 'Eng (*) N1 Avg',
+             'Altitude AAL For Flight Phases', 'Model')
+        ]
 
     def test_derive_basic(self):
         spd_brk_loop = [0] * 4 + [1] * 2 + [0] * 4
@@ -18151,7 +18154,23 @@ class TestSpeedbrakeDeployedWithPowerOnDuration(unittest.TestCase, NodeTest):
         aal = P('Altitude AAL For Flight Phases',
                 array=np.ma.concatenate((np.arange(0, 75, 5), np.arange(70, -5, -5))))
         node = self.node_class()
-        node.derive(spd_brk, power, aal)
+        node.derive(spd_brk, power, aal, None)
+        self.assertEqual(node, [
+            KeyPointValue(14, 2.0,
+                          'Speedbrake Deployed With Power On Duration')])
+
+    def test_derive_CRJ200ER(self):
+        spd_brk_loop = [0] * 4 + [1] * 2 + [0] * 4
+        values_mapping = {0: 'Undeployed/Cmd Down', 1: 'Deployed/Cmd Up'}
+        spd_brk = M(
+            'Speedbrake Selected', values_mapping=values_mapping,
+            array=np.ma.array(spd_brk_loop * 3))
+        power = P('Eng (*) N1 Avg',
+                  array=np.ma.concatenate((np.ones(10) * 40, np.ones(10) * 80, np.ones(10) * 70)))
+        aal = P('Altitude AAL For Flight Phases',
+                array=np.ma.concatenate((np.arange(0, 150, 5), np.arange(150, -5, -5))))
+        node = self.node_class()
+        node.derive(spd_brk, power, aal, A('Model', 'CRJ200ER (CL-600-2B19)'))
         self.assertEqual(node, [
             KeyPointValue(14, 2.0,
                           'Speedbrake Deployed With Power On Duration')])
