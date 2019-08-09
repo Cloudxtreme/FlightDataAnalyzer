@@ -16677,8 +16677,8 @@ class MasterWarningDuration(KeyPointValueNode):
     '''
     Duration for which the Master Warning was active.
 
-    On some types nuisance recordings arise before first engine start, hence
-    the added condition for engine running.
+    On some types nuisance recordings arise before takeoff or after langing.
+    So we only consider from beginning of Takeoff until end of Landing section.
     '''
 
     units = ut.SECOND
@@ -16691,13 +16691,13 @@ class MasterWarningDuration(KeyPointValueNode):
     def derive(self,
                warning=M('Master Warning'),
                any_engine=M('Eng (*) Any Running'),
-               family=A('Family'),
+               ac_type=A('Aircraft Type'),
                airborne=S('Airborne')):
 
         # min duration is a greater than or equal to operator
         single_sample = (1/warning.hz) + 1
 
-        if family and family.value in 'AW139':
+        if ac_type and ac_type.value == 'helicopter':
             self.create_kpvs_where(warning.array == 'Warning', warning.hz, phase=airborne, min_duration=single_sample)
 
         elif any_engine:

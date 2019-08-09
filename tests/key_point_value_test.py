@@ -18688,13 +18688,13 @@ class TestMasterWarningDuration(unittest.TestCase, NodeTest):
                      values_mapping={1: 'Running'})                   )
         self.assertEqual(len(warn), 0)
 
-    def test_derive_AW139(self):
+    def test_derive_helicopter(self):
         master_warning = M(array=np.ma.array([0,0,0,1,1,1,1,1,1,1,0,0]),
                            values_mapping={1: 'Warning'})
-        family = A('Family', value='AW139')
+        ac_type = A('Aircraft Type', value='helicopter')
         phase = buildsection('Airborne', 5, 7)
         node = self.node_class()
-        node.derive(master_warning, None, family, phase)
+        node.derive(master_warning, None, ac_type, phase)
         self.assertEqual(len(node), 1)
         self.assertEqual(node[0].index, 5)
         self.assertEqual(node[0].value, 3)
