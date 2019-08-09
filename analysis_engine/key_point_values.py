@@ -16684,25 +16684,29 @@ class MasterWarningDuration(KeyPointValueNode):
     units = ut.SECOND
 
     @classmethod
-    def can_operate(cls, available):
+    def can_operate(cls, available, ac_type=A('Aircraft Type')):
+        if ac_type == helicopter:
+            sections = 'Airborne' in available
+        else:
+            sections = all_of(['Takeoff', 'Airborne', 'Landing'], available)
 
-        return 'Master Warning' in available
+        return all_of(['Master Warning', 'Aircraft Type'], available) and sections
 
     def derive(self,
                warning=M('Master Warning'),
                ac_type=A('Aircraft Type'),
                tkoffs=S('Takeoff'),
-               fasts=S('Fast'),
+               airborne=S('Airborne'),
                landings=S('Landing'),
-               airborne=S('Airborne')):
+               ):
 
         # min duration is a greater than or equal to operator
         single_sample = (1/warning.hz) + 1
 
-        if ac_type and ac_type.value == 'helicopter':
+        if ac_type.value == helicopter:
             self.create_kpvs_where(warning.array == 'Warning', warning.hz, phase=airborne, min_duration=single_sample)
         else:
-            sections = slices_or(tkoffs.get_slices(), fasts.get_slices(), landings.get_slices())
+            sections = slices_or(tkoffs.get_slices(), airborne.get_slices(), landings.get_slices())
             self.create_kpvs_where(warning.array == 'Warning', warning.hz, phase=sections, min_duration=single_sample)
 
 

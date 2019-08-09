@@ -18652,23 +18652,31 @@ class TestMasterWarningDuration(unittest.TestCase, NodeTest):
 
     def setUp(self):
         self.node_class = MasterWarningDuration
-        self.operational_combinations = [('Master Warning',)]
         self.warnings = M(array=np.ma.array([0,1,1,1,0] * 3),
                           values_mapping={1: 'Warning'})
         self.ac_type = A('Aircraft Type', value='aeroplane')
         self.tkoffs = buildsection('Takeoff', 3, 5)
-        self.fasts = buildsection('Fast', 4, 10)
+        self.airborne = buildsection('Airborne', 4, 10)
         self.landings = buildsection('Landing', 9, 12)
-        self.airborne = buildsection('Airborne', 5, 9)
+
+    def test_can_operate(self):
+        can_op = self.node_class.can_operate
+        self.assertTrue(
+            can_op(('Master Warning', 'Airborne', 'Aircraft Type'),
+                   ac_type=helicopter)
+        )
+        self.assertTrue(
+            can_op(('Master Warning', 'Takeoff', 'Airborne', 'Landing', 'Aircraft Type'),
+                   ac_type=aeroplane)
+        )
 
     def test_derive(self):
         warn = MasterWarningDuration()
         warn.derive(self.warnings,
                     self.ac_type,
                     self.tkoffs,
-                    self.fasts,
-                    self.landings,
                     self.airborne,
+                    self.landings,
                     )
         self.assertEqual(len(warn), 1)
         self.assertEqual(warn[0].index, 6)
@@ -18679,9 +18687,8 @@ class TestMasterWarningDuration(unittest.TestCase, NodeTest):
         warn.derive(self.warnings,
                     self.ac_type,
                     SectionNode('Takeoff', items=[]),
-                    SectionNode('Fast', items=[]),
+                    SectionNode('Airborne', items=[]),
                     SectionNode('Landing', items=[]),
-                    self.airborne,
                     )
         self.assertEqual(len(warn), 0)
 
@@ -18690,9 +18697,8 @@ class TestMasterWarningDuration(unittest.TestCase, NodeTest):
         warn.derive(self.warnings,
                         self.ac_type,
                         SectionNode('Takeoff', items=[]),
-                        self.fasts,
-                        SectionNode('Landing', items=[]),
                         self.airborne,
+                        SectionNode('Landing', items=[]),
                         )
         self.assertEqual(len(warn), 1)
         self.assertEqual(warn[0].index, 6)
@@ -18703,9 +18709,8 @@ class TestMasterWarningDuration(unittest.TestCase, NodeTest):
         warn.derive(self.warnings,
                         A('Aircraft Type', value='helicopter'),
                         self.tkoffs,
-                        self.fasts,
-                        self.landings,
                         self.airborne,
+                        self.landings,
                         )
         self.assertEqual(len(warn), 1)
         self.assertEqual(warn[0].index, 6)
@@ -18719,9 +18724,8 @@ class TestMasterWarningDuration(unittest.TestCase, NodeTest):
         warn.derive(warnings,
                     self.ac_type,
                     self.tkoffs,
-                    self.fasts,
-                    self.landings,
                     self.airborne,
+                    self.landings,
                     )
         self.assertEqual(len(warn), 0)
 
@@ -18731,15 +18735,13 @@ class TestMasterWarningDuration(unittest.TestCase, NodeTest):
                           values_mapping={1: 'Warning'})
         ac_type = A('Aircraft Type', value='aeroplane')
         tkoffs = buildsections('Takeoff', [3, 5], [18, 20])
-        fasts = buildsections('Fast', [4, 10], [19, 25])
+        airborne = buildsections('Airborne', [4, 10], [19, 25])
         landings = buildsections('Landing', [9, 12], [24, 27])
-        airborne = buildsections('Airborne', [5, 9], [20, 24])
         warn.derive(warnings,
                     ac_type,
                     tkoffs,
-                    fasts,
-                    landings,
                     airborne,
+                    landings,
                     )
         self.assertEqual(len(warn), 2)
         self.assertEqual(warn[0].index, 6)
