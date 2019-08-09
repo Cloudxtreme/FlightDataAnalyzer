@@ -16690,8 +16690,10 @@ class MasterWarningDuration(KeyPointValueNode):
 
     def derive(self,
                warning=M('Master Warning'),
-               any_engine=M('Eng (*) Any Running'),
                ac_type=A('Aircraft Type'),
+               tkoffs=S('Takeoff'),
+               fasts=S('Fast'),
+               landings=S('Landing'),
                airborne=S('Airborne')):
 
         # min duration is a greater than or equal to operator
@@ -16699,13 +16701,9 @@ class MasterWarningDuration(KeyPointValueNode):
 
         if ac_type and ac_type.value == 'helicopter':
             self.create_kpvs_where(warning.array == 'Warning', warning.hz, phase=airborne, min_duration=single_sample)
-
-        elif any_engine:
-            self.create_kpvs_where(np.ma.logical_and(warning.array == 'Warning',
-                                                     any_engine.array == 'Running'),
-                                   warning.hz, min_duration=single_sample)
         else:
-            self.create_kpvs_where(warning.array == 'Warning', warning.hz, min_duration=single_sample)
+            sections = slices_or(tkoffs.get_slices(), fasts.get_slices(), landings.get_slices())
+            self.create_kpvs_where(warning.array == 'Warning', warning.hz, phase=sections, min_duration=single_sample)
 
 
 class MasterWarningDuringTakeoffDuration(KeyPointValueNode):

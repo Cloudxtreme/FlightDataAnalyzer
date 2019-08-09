@@ -18652,63 +18652,100 @@ class TestMasterWarningDuration(unittest.TestCase, NodeTest):
 
     def setUp(self):
         self.node_class = MasterWarningDuration
-        self.operational_combinations = [('Master Warning','Eng (*) Any Running'),
-                                         ('Master Warning',)]
+        self.operational_combinations = [('Master Warning',)]
+        self.warnings = M(array=np.ma.array([0,1,1,1,0] * 3),
+                          values_mapping={1: 'Warning'})
+        self.ac_type = A('Aircraft Type', value='aeroplane')
+        self.tkoffs = buildsection('Takeoff', 3, 5)
+        self.fasts = buildsection('Fast', 4, 10)
+        self.landings = buildsection('Landing', 9, 12)
+        self.airborne = buildsection('Airborne', 5, 9)
 
     def test_derive(self):
         warn = MasterWarningDuration()
-        warn.derive(M(array=np.ma.array([0,1,1,1,0]),
-                      values_mapping={1: 'Warning'}),
-                    M(array=np.ma.array([0,0,1,1,0]),
-                     values_mapping={1: 'Running'})                   )
-        self.assertEqual(warn[0].index, 2)
-        self.assertEqual(warn[0].value, 2)
-
-    def test_no_engines(self):
-        warn = MasterWarningDuration()
-        warn.derive(M(array=np.ma.array([0,1,1,1,0]),
-                      values_mapping={1: 'Warning'}),None)
-        self.assertEqual(warn[0].index, 1)
+        warn.derive(self.warnings,
+                    self.ac_type,
+                    self.tkoffs,
+                    self.fasts,
+                    self.landings,
+                    self.airborne,
+                    )
+        self.assertEqual(len(warn), 1)
+        self.assertEqual(warn[0].index, 6)
         self.assertEqual(warn[0].value, 3)
 
-    def test_derive_all_running(self):
+    def test_missing_sections(self):
         warn = MasterWarningDuration()
-        warn.derive(M(array=np.ma.array([0,1,1,1,1]),
-                      values_mapping={1: 'Warning'}),
-                    M(array=np.ma.array([1,1,1,1,1]),
-                     values_mapping={1: 'Running'})                   )
-        self.assertEqual(warn[0].index, 1)
-        self.assertEqual(warn[0].value, 4)
-
-    def test_derive_not_running(self):
-        warn = MasterWarningDuration()
-        warn.derive(M(array=np.ma.array([0,1,1,1,0]),
-                      values_mapping={1: 'Warning'}),
-                    M(array=np.ma.array([0,0,0,0,0]),
-                     values_mapping={1: 'Running'})                   )
+        warn.derive(self.warnings,
+                    self.ac_type,
+                    SectionNode('Takeoff', items=[]),
+                    SectionNode('Fast', items=[]),
+                    SectionNode('Landing', items=[]),
+                    self.airborne,
+                    )
         self.assertEqual(len(warn), 0)
 
+    def test_derive_only_fast_section(self):
+        warn = MasterWarningDuration()
+        warn.derive(self.warnings,
+                        self.ac_type,
+                        SectionNode('Takeoff', items=[]),
+                        self.fasts,
+                        SectionNode('Landing', items=[]),
+                        self.airborne,
+                        )
+        self.assertEqual(len(warn), 1)
+        self.assertEqual(warn[0].index, 6)
+        self.assertEqual(warn[0].value, 3)
+
     def test_derive_helicopter(self):
-        master_warning = M(array=np.ma.array([0,0,0,1,1,1,1,1,1,1,0,0]),
-                           values_mapping={1: 'Warning'})
-        ac_type = A('Aircraft Type', value='helicopter')
-        phase = buildsection('Airborne', 5, 7)
-        node = self.node_class()
-        node.derive(master_warning, None, ac_type, phase)
-        self.assertEqual(len(node), 1)
-        self.assertEqual(node[0].index, 5)
-        self.assertEqual(node[0].value, 3)
+        warn = MasterWarningDuration()
+        warn.derive(self.warnings,
+                        A('Aircraft Type', value='helicopter'),
+                        self.tkoffs,
+                        self.fasts,
+                        self.landings,
+                        self.airborne,
+                        )
+        self.assertEqual(len(warn), 1)
+        self.assertEqual(warn[0].index, 6)
+        self.assertEqual(warn[0].value, 3)
 
     def test_derive_single_sample(self):
-        node = MasterWarningDuration()
-        master_warning = M(array=np.ma.array([0,1]*10),
+        warn = MasterWarningDuration()
+        warnings = M(array=np.ma.array([0,1] * 10),
                            values_mapping={1: 'Warning'},
                            )
-        engine_running = M(array=np.ma.array([1]*20),
-                           values_mapping={1:'Running'},
-                           )
-        node.derive(master_warning, engine_running)
-        self.assertEqual(len(node), 0)
+        warn.derive(warnings,
+                    self.ac_type,
+                    self.tkoffs,
+                    self.fasts,
+                    self.landings,
+                    self.airborne,
+                    )
+        self.assertEqual(len(warn), 0)
+
+    def test_derive_multiple_fast_sections(self):
+        warn = MasterWarningDuration()
+        warnings = M(array=np.ma.array([0,1,1,1,0] * 6),
+                          values_mapping={1: 'Warning'})
+        ac_type = A('Aircraft Type', value='aeroplane')
+        tkoffs = buildsections('Takeoff', [3, 5], [18, 20])
+        fasts = buildsections('Fast', [4, 10], [19, 25])
+        landings = buildsections('Landing', [9, 12], [24, 27])
+        airborne = buildsections('Airborne', [5, 9], [20, 24])
+        warn.derive(warnings,
+                    ac_type,
+                    tkoffs,
+                    fasts,
+                    landings,
+                    airborne,
+                    )
+        self.assertEqual(len(warn), 2)
+        self.assertEqual(warn[0].index, 6)
+        self.assertEqual(warn[0].value, 3)
+        self.assertEqual(warn[1].index, 21)
+        self.assertEqual(warn[1].value, 3)
 
 
 class TestEngRunningDuration(unittest.TestCase):
