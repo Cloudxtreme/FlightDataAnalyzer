@@ -1048,6 +1048,53 @@ class TestFortWorth(unittest.TestCase):
         self.assertEqual(int(approaches[0].loc_est.stop), app_end)
 
 
+class TestHeraklion(unittest.TestCase):
+    # There is no ILS from this direction.
+    @patch('analysis_engine.approaches.api')
+    def test_her(self, api):
+
+        get_handler = Mock()
+        get_handler.get_nearest_airport.return_value = [airports['heraklion']]
+        api.get_handler.return_value = get_handler
+
+        def fetch(par_name):
+            try:
+                return load(root + par_name + '.nod')
+            except:
+                return None
+
+        root = os.path.join(approaches_path, 'Landing_test_22159938_')
+
+        approaches = ApproachInformation()
+        approaches.derive(fetch('Altitude AAL'),
+                          None, # Altitude AGL
+                          A('Aircraft Type', 'aeroplane'),
+                          fetch('Approach And Landing'),
+                          fetch('Heading Continuous'),
+                          fetch('Latitude Prepared'),
+                          fetch('Longitude Prepared'),
+                          fetch('ILS Localizer'),
+                          fetch('ILS Glideslope'),
+                          fetch('ILS Frequency'),
+                          A(name='AFR Landing Airport', value=None),
+                          A(name='AFR Landing Runway', value=None),
+                          KPV('Latitude At Touchdown', items=[]),
+                          KPV('Longitude At Touchdown', items=[]),
+                          A('Precise Positioning', False),
+                          fetch('Fast'),
+                          None, # Airspeed
+                          None, # Groundspeed
+                          None, # Altitude ADH
+                          None, # Vertical Speed
+                          None, # Roll
+                          fetch('Heading'),)
+        self.assertEqual(approaches[0].airport['name'], 'Iraklion - Nizos Kazantzakis')
+        self.assertEqual(approaches[0].landing_runway['identifier'], '27')
+        self.assertEqual(approaches[0].gs_est, None)
+        self.assertEqual(approaches[0].loc_est, None)
+        self.assertEqual(approaches[0].ils_freq, None)
+
+
 class TestHerat(unittest.TestCase):
 
     # This aircraft does not record latitude and longitude

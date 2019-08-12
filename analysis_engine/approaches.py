@@ -235,10 +235,10 @@ class ApproachInformation(ApproachNode):
             if appr_ils_freq:
                 kwargs['ilsfreq'] = appr_ils_freq
 
-                # We already have latitude and longitude in kwargs from looking up
-                # the airport. If the measurments are not precise, remove them.
-                if not precise:
-                    kwargs['hint'] = hint
+            # We already have latitude and longitude in kwargs from looking up
+            # the airport. If the measurments are not precise, remove them.
+            if not precise:
+                kwargs['hint'] = hint
 
             runway = nearest_runway(airport, lowest_hdg, **kwargs)
             if not runway:

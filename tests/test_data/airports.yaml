@@ -1118,6 +1118,58 @@ gran_canaria:
       !!python/unicode 'longitude': -15.392342000000005}
     !!python/unicode 'strip': {!!python/unicode 'id': 4969, !!python/unicode 'length': 10171,
       !!python/unicode 'surface': !!python/unicode 'ASP', !!python/unicode 'width': 148}
+heraklion:
+  !!python/unicode 'code': {!!python/unicode 'iata': !!python/unicode 'HER', !!python/unicode 'icao': !!python/unicode 'LGIR'}
+  !!python/unicode 'distance': 1.4340353233669816
+  !!python/unicode 'elevation': 115
+  !!python/unicode 'id': 3057
+  !!python/unicode 'latitude': 35.3397
+  !!python/unicode 'location': {!!python/unicode 'city': !!python/unicode 'Heraklion-Crete
+      Island', !!python/unicode 'country': !!python/unicode 'Greece'}
+  !!python/unicode 'longitude': 25.1803
+  !!python/unicode 'magnetic_variation': !!python/unicode 'E003139 0106'
+  !!python/unicode 'name': !!python/unicode 'Iraklion - Nizos Kazantzakis'
+  !!python/unicode 'runways':
+  - !!python/unicode 'end': {!!python/unicode 'elevation': 49, !!python/unicode 'latitude': 35.34301003760393,
+      !!python/unicode 'longitude': 25.174726019852002}
+    !!python/unicode 'id': 5480
+    !!python/unicode 'identifier': !!python/unicode '30'
+    !!python/unicode 'localizer': {!!python/unicode 'is_offset': false}
+    !!python/unicode 'magnetic_heading': 302.0
+    !!python/unicode 'start': {!!python/unicode 'elevation': 115, !!python/unicode 'latitude': 35.33598486437156,
+      !!python/unicode 'longitude': 25.18639201090752}
+    !!python/unicode 'strip': {!!python/unicode 'id': 2740, !!python/unicode 'length': 5138,
+      !!python/unicode 'surface': !!python/unicode 'ASP', !!python/unicode 'width': 164}
+  - !!python/unicode 'end': {!!python/unicode 'elevation': 115, !!python/unicode 'latitude': 35.33557131662304,
+      !!python/unicode 'longitude': 25.187269093255864}
+    !!python/unicode 'id': 5479
+    !!python/unicode 'identifier': !!python/unicode '12'
+    !!python/unicode 'localizer': {!!python/unicode 'is_offset': false}
+    !!python/unicode 'magnetic_heading': 122.0
+    !!python/unicode 'start': {!!python/unicode 'elevation': 49, !!python/unicode 'latitude': 35.343104116710236,
+      !!python/unicode 'longitude': 25.17477161740606}
+    !!python/unicode 'strip': {!!python/unicode 'id': 2740, !!python/unicode 'length': 5138,
+      !!python/unicode 'surface': !!python/unicode 'ASP', !!python/unicode 'width': 164}
+  - !!python/unicode 'end': {!!python/unicode 'elevation': 74, !!python/unicode 'latitude': 35.34075756719589,
+      !!python/unicode 'longitude': 25.166445494085757}
+    !!python/unicode 'id': 5478
+    !!python/unicode 'identifier': !!python/unicode '27'
+    !!python/unicode 'localizer': {!!python/unicode 'is_offset': false}
+    !!python/unicode 'magnetic_heading': 271.0
+    !!python/unicode 'start': {!!python/unicode 'elevation': 82, !!python/unicode 'latitude': 35.339070887867834,
+      !!python/unicode 'longitude': 25.19091010681612}
+    !!python/unicode 'strip': {!!python/unicode 'id': 2739, !!python/unicode 'length': 8904,
+      !!python/unicode 'surface': !!python/unicode 'ASP', !!python/unicode 'width': 148}
+  - !!python/unicode 'end': {!!python/unicode 'elevation': 82, !!python/unicode 'latitude': 35.33897461606591,
+      !!python/unicode 'longitude': 25.19086719147249}
+    !!python/unicode 'id': 5477
+    !!python/unicode 'identifier': !!python/unicode '09'
+    !!python/unicode 'localizer': {!!python/unicode 'is_offset': false}
+    !!python/unicode 'magnetic_heading': 91.0
+    !!python/unicode 'start': {!!python/unicode 'elevation': 74, !!python/unicode 'latitude': 35.34069630461603,
+      !!python/unicode 'longitude': 25.16642671862257}
+    !!python/unicode 'strip': {!!python/unicode 'id': 2739, !!python/unicode 'length': 8904,
+      !!python/unicode 'surface': !!python/unicode 'ASP', !!python/unicode 'width': 148}
 herat:
   !!python/unicode 'code': {!!python/unicode 'iata': !!python/unicode 'HEA', !!python/unicode 'icao': !!python/unicode 'OAHR'}
   !!python/unicode 'elevation': 3290
