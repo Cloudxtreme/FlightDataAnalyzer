@@ -954,18 +954,10 @@ class AltitudeAALForFlightPhases(DerivedParameterNode):
     name = 'Altitude AAL For Flight Phases'
     units = ut.FT
 
-    @classmethod
-    def can_operate(cls, available):
-        return 'Altitude AAL' in available
+    def derive(self, alt_aal=P('Altitude AAL')):
 
-    def derive(self, alt_aal=P('Altitude AAL'), gog=P('Gear On Ground')):
-
-        if gog:
-            alt = np.ma.where(gog.array == 'Ground', 0.0, alt_aal.array)
-        else:
-            alt = alt_aal.array
-
-        self.array = np.ma.maximum(repair_mask(alt, repair_duration=None), 0.0)
+        self.array = np.ma.maximum(repair_mask(alt_aal.array, repair_duration=None),
+                                   0.0)
 
 
 class AltitudeRadio(DerivedParameterNode):

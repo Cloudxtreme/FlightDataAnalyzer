@@ -580,13 +580,20 @@ class TestApproach(unittest.TestCase):
         self.assertAlmostEqual(app[1].slice.stop, 149, places=0)
 
 
-
 class TestBouncedLanding(unittest.TestCase):
+    def setUp(self):
+        self.node_class = BouncedLanding
+
+    def test_can_operate(self):
+        self.assertTrue(BouncedLanding.can_operate(
+            ('Altitude AAL For Flight Phases', 'Airborne'),
+            ac_type=aeroplane))
+
     def test_bounce_basic(self):
         airborne = buildsection('Airborne', 3,10)
         alt = np.ma.array([0,0,0,2,10,30,10,2,0,0,0,0,0,0])
         bl = BouncedLanding()
-        bl.derive(Parameter('Altitude AAL For Flight Phases', alt), airborne)
+        bl.derive(Parameter('Altitude AAL For Flight Phases', alt), airborne, None)
         expected = []
         self.assertEqual(bl, expected)
 
@@ -594,22 +601,30 @@ class TestBouncedLanding(unittest.TestCase):
         airborne = buildsection('Airborne', 3,11)
         alt = np.ma.array([0,0,0,2,10,30,10,2,0,3,3,0,0,0])
         bl = BouncedLanding()
-        bl.derive(Parameter('Altitude AAL For Flight Phases', alt), airborne)
+        bl.derive(Parameter('Altitude AAL For Flight Phases', alt), airborne, None)
         self.assertEqual(bl[0].slice, slice(9, 11))
 
     def test_bounce_with_double_bounce(self):
         airborne = buildsection('Airborne', 3,12)
         alt = np.ma.array([0,0,0,2,10,30,10,2,0,3,0,5,0])
         bl = BouncedLanding()
-        bl.derive(Parameter('Altitude AAL For Flight Phases', alt), airborne)
+        bl.derive(Parameter('Altitude AAL For Flight Phases', alt), airborne, None)
         self.assertEqual(bl[0].slice, slice(9, 12))
+
+    def test_bounce_with_bounce_with_gog(self):
+        airborne = buildsection('Airborne', 3,11)
+        alt = np.ma.array([0,0,0,2,10,30,10,2,0,3,3,0,0,0])
+        gog = M('Gear On Ground', np.ma.array([1]*3 + [0]*5 + [1]*6), values_mapping = {0:'Air', 1:'Ground'})
+        bl = BouncedLanding()
+        bl.derive(Parameter('Altitude AAL For Flight Phases', alt), airborne, gog)
+        self.assertEqual(len(bl.get_slices()), 0) # Only first bounce has wheels off ground
 
     def test_bounce_not_detected_with_multiple_touch_and_go(self):
         # test data is a training flight with many touch and go
         bl = BouncedLanding()
         aal = load(os.path.join(test_data_path, 'alt_aal_training.nod'))
         airs = load(os.path.join(test_data_path, 'airborne_training.nod'))
-        bl.derive(aal, airs)
+        bl.derive(aal, airs, None)
         # should not create any bounced landings (used to create 20 at 8000ft)
         self.assertEqual(len(bl), 0)
 
