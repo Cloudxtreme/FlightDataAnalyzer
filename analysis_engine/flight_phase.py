@@ -397,12 +397,18 @@ class BouncedLanding(FlightPhaseNode):
     an airborne phase.
     '''
 
-    can_operate = aeroplane_only
+    @classmethod
+    def can_operate(cls, available, ac_type=A('Aircraft Type')):
+        return ac_type == aeroplane and \
+               all_of(('Altitude AAL For Flight Phases', 'Airborne'), available)
 
     def derive(self, alt_aal=P('Altitude AAL For Flight Phases'),
-               airs=S('Airborne')):
+               airs=S('Airborne'), gog=P('Gear On Ground')):
         gnds = np.ma.clump_masked(np.ma.masked_less(alt_aal.array,
                                                     BOUNCED_LANDING_THRESHOLD))
+        if gog:
+            gnds = slices_or(gnds, runs_of_ones(gog.array == 'Ground'))
+
         for air in airs:
             for gnd in gnds:
                 if not is_slice_within_slice(gnd, air.slice):
