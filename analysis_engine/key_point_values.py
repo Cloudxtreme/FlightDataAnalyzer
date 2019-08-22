@@ -19557,7 +19557,7 @@ class EngThrustTakeoffDerate(KeyPointValueNode):
 
 class EngTakeoffDerateDuration(KeyPointValueNode):
     '''
-    KPV to enable operators of B767/757s to measure the number of rated vs derated takeoffs.
+    KPV to enable operators of B757s to measure the number of rated vs derated takeoffs.
     Depending on available parameters, it will create a duration KPV during the Takeoff Roll if:
       - Eng (*) EPR Max is below than 95% of the highest (1/2) EPR Limit between 95 and 105 knots, or
       - Temp Derate Status is 'Operative' between 95 and 105 knots
