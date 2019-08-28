@@ -3949,12 +3949,14 @@ class TestGearUpInTransit(unittest.TestCase):
         # show a change. Can only be picked up if we record one of the following
         # parameters: Gear Position, Gear In Transit, Gear Red or
         # Gear Up Selected. See GearDownInTransit test for more info.
+        # Gear Red Warnings unfortunately triggers spuriously on some dataframes.
+        # So we cannot detect this edge case with Red Warnings.
         self.expected_short = M('Gear Up In Transit', array=np.ma.array([0]*5 + [1]*3 + [0]*7 + [1]*10 + [0]*35),
                                 values_mapping=self.values_mapping)
         self.family = A('Aircraft Family', value='Generic Family')
         self.series = A('Aircraft Series', value='Generic Series')
         self.model = A('Aircraft Model', value='Generic Model')
-        self.airborne=buildsection('Airborne', 0, 59)
+        self.airborne=buildsection('Airborne', 1, 59)
 
     def test_can_operate(self):
         combinations = self.node_class.get_operational_combinations()
@@ -4148,26 +4150,26 @@ class TestGearUpInTransit(unittest.TestCase):
         # Gear Down changed to Up + transition time
         gear_down = M('Gear Down', array=np.ma.array([1]*5 + [0]*50 + [1]*5),
                    values_mapping={0: 'Up', 1: 'Down'})
-        red_warn = M('Gear (*) Red Warning', array=np.ma.array([0]*5 + [1]*3 + [0]*7 + [1]*10 + [0]*20 + [1]*10 + [0]*5),
+        red_warn = M('Gear (*) Red Warning', array=np.ma.array([0]*5 + [1]*10 + [0]*10 + [1]*3 + [0]*17 + [1]*10 + [0]*5),
                       values_mapping={0: '-', 1: 'Warning'})
         node = self.node_class()
         node.derive(gear_down, None, None, None, red_warn, None, self.airborne, self.model, self.series, self.family)
-
-        np.testing.assert_array_equal(node.array, self.expected_short.array)
+        # Gear Red Warning triggers spuriously. Cannot detect short periods not linked with Gear Down.
+        np.testing.assert_array_equal(node.array, self.expected.array)
         self.assertEqual(node.values_mapping, self.values_mapping)
 
     @patch('analysis_engine.multistate_parameters.at')
     def test_derive__gear_up_red_warn(self, at):
-        at.get_gear_transition_times.return_value = (10, 10)  # patch transition time to be 10 seconds
+        at.get_gear_transition_times.return_value = (5, 5)  # patch transition time to be 5 seconds
         # Gear Up changed to Up - transition time
-        gear_up = M('Gear Up', array=np.ma.array([0]*25 + [1]*20 + [0]*15),
+        gear_up = M('Gear Up', array=np.ma.array([0]*15 + [1]*30 + [0]*15),
                    values_mapping={0: 'Down', 1: 'Up'})
-        red_warn = M('Gear (*) Red Warning', array=np.ma.array([0]*5 + [1]*3 + [0]*7 + [1]*10 + [0]*20 + [1]*10 + [0]*5),
+        red_warn = M('Gear (*) Red Warning', array=np.ma.array([0]*5 + [1]*10 + [0]*10 + [1]*3 + [0]*17 + [1]*10 + [0]*5),
                       values_mapping={0: '-', 1: 'Warning'})
         node = self.node_class()
         node.derive(None, gear_up, None, None, red_warn, None, self.airborne, self.model, self.series, self.family)
-
-        np.testing.assert_array_equal(node.array, self.expected_short.array)
+        # Gear Red Warning triggers spuriously. Cannot detect short periods not linked with Gear Up.
+        np.testing.assert_array_equal(node.array, self.expected.array)
         self.assertEqual(node.values_mapping, self.values_mapping)
 
     @patch('analysis_engine.multistate_parameters.at')
@@ -4176,12 +4178,12 @@ class TestGearUpInTransit(unittest.TestCase):
         # Gear Down changed to Up + transition time
         gear_down = M('Gear Down', array=np.ma.array([1]*5 + [0]*50 + [1]*5),
                    values_mapping={0: 'Up', 1: 'Down'})
-        red_warn = M('Gear (*) Red Warning', array=np.ma.array([0]*5 + [1]*3 + [0]*7 + [1]*10 + [0]*20 + [1]*10 + [0]*5),
+        red_warn = M('Gear (*) Red Warning', array=np.ma.array([0]*5 + [1]*10 + [0]*10 + [1]*3 + [0]*17 + [1]*10 + [0]*5),
                       values_mapping={0: '-', 1: 'Warning'})
         node = self.node_class()
         node.derive(gear_down, None, None, None, red_warn, None, self.airborne, self.model, self.series, A('Family', value='B737 Classic'))
-
-        np.testing.assert_array_equal(node.array, self.expected_short.array)
+        # Gear Red Warning triggers spuriously. Cannot detect short periods not linked with Gear Down.
+        np.testing.assert_array_equal(node.array, self.expected.array)
         self.assertEqual(node.values_mapping, self.values_mapping)
 
 
@@ -4211,12 +4213,14 @@ class TestGearDownInTransit(unittest.TestCase):
         # that moment. We ought to detect that period too when recording the
         # necessary parameters: Gear Position, Gear In Transit, Gear Red or
         # Gear Down Selected
+        # Gear Red Warnings unfortunately triggers spuriously on some dataframes.
+        # So we cannot detect this edge case with Red Warnings.
         self.expected_short = M('Gear Down In Transit', array=np.ma.array([0]*35 + [1]*3 + [0]*7 + [1]*10 + [0]*5),
                                 values_mapping=self.values_mapping)
         self.family = A('Aircraft Family', value='Generic Family')
         self.series = A('Aircraft Series', value='Generic Series')
         self.model = A('Aircraft Model', value='Generic Model')
-        self.airborne=buildsection('Airborne', 0, 59)
+        self.airborne=buildsection('Airborne', 1, 59)
 
     def test_can_operate(self):
         combinations = self.node_class.get_operational_combinations()
@@ -4385,23 +4389,27 @@ class TestGearDownInTransit(unittest.TestCase):
                       values_mapping={0: '-', 1: 'Warning'})
         node = self.node_class()
         node.derive(gear_down, None, None, None, red_warn, None, self.airborne, self.model, self.series, self.family)
-
-        np.testing.assert_array_equal(node.array, self.expected_short.array)
+        # Gear Red Warning triggers spuriously. Cannot detect short periods not linked with Gear Down.
+        expected_short = M('Gear Down In Transit', array=np.ma.array([0]*45 + [1]*10 + [0]*5),
+                                        values_mapping=self.values_mapping)
+        np.testing.assert_array_equal(node.array, expected_short.array)
         self.assertEqual(node.values_mapping, self.values_mapping)
 
     @patch('analysis_engine.multistate_parameters.at')
     def test_derive__gear_up_red_warning(self, at):
-        at.get_gear_transition_times.return_value = (10, 10)
+        at.get_gear_transition_times.return_value = (5, 5)
         # Gear Up changed to Up + Red Warning
-        ac_series = A('Generic') # patch transition time to be 10 seconds
+        ac_series = A('Generic') # patch transition time to be 5 seconds
         gear_up = M('Gear Up', array=np.ma.array([0]*15 + [1]*30 + [0]*15),
                    values_mapping={0: 'Down', 1: 'Up'})
         red_warn = M('Gear (*) Red Warning', array=np.ma.array([0]*5 + [1]*10 + [0]*20 + [1]*3 + [0]*7 + [1]*10 + [0]*5),
                       values_mapping={0: '-', 1: 'Warning'})
         node = self.node_class()
         node.derive(None, gear_up, None, None, red_warn, None, self.airborne, self.model, self.series, self.family)
-
-        np.testing.assert_array_equal(node.array, self.expected_short.array)
+        # Gear Red Warning triggers spuriously. Cannot detect short periods not linked with Gear Down.
+        expected_short = M('Gear Down In Transit', array=np.ma.array([0]*45 + [1]*10 + [0]*5),
+                                        values_mapping=self.values_mapping)
+        np.testing.assert_array_equal(node.array, expected_short.array)
         self.assertEqual(node.values_mapping, self.values_mapping)
 
     @patch('analysis_engine.multistate_parameters.at')

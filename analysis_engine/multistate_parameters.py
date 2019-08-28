@@ -43,6 +43,7 @@ from analysis_engine.library import (
     slice_duration,
     slices_and,
     slices_and_not,
+    slices_extend,
     slices_from_to,
     slices_overlap,
     slices_remove_small_gaps,
@@ -1606,7 +1607,7 @@ class GearDownInTransit(MultistateDerivedParameterNode):
                model=A('Model'), series=A('Series'), family=A('Family')):
 
         gear_sels = gear_ups = gear_downs = runs = []
-        self.array = np_ma_zeros_like(first_valid_parameter(gear_down, gear_up, gear_down_sel, gear_position).array)
+        self.array = np_ma_zeros_like(first_valid_parameter(gear_down, gear_up, gear_down_sel, gear_position).array, dtype=int)
 
         # work out fallback
         extend_duration = 0
@@ -1647,12 +1648,29 @@ class GearDownInTransit(MultistateDerivedParameterNode):
                     transit for transit in transits
                     if not slices_overlap(transit, gear_moving_up)
                 ]
+
+            if gear_red:
+                # Dataframes show spurious Gear Red Warnings.
+                # Only consider transits within a reasonable range of Gear Down.
+                gear_moving_downs = [
+                    slice(
+                        max(gear_down_edge - duration, 0),
+                        min(gear_down_edge + duration, len(self.array))
+                    )
+                    for gear_down_edge in gear_downs
+                ]
+                transits = [
+                            transit for gear_moving_down in gear_moving_downs
+                            for transit in transits
+                            if slices_overlap(transit, gear_moving_down)
+                        ]
+
             gear_down_slices = runs_of_ones(nearest_neighbour_mask_repair(gear_down.array) == 'Down')
             runs = slices_and_not(transits, gear_down_slices)
 
-            if family and family.value == 'B737 Classic' and fallback:
+            if family and family.value == 'B737 Classic' and extend_duration:
                 for idx, run in enumerate(runs):
-                    if slice_duration(run, self.frequency) > fallback:
+                    if slice_duration(run, self.frequency) > extend_duration:
                         stop = run.stop
                         runs[idx] = slice(int(math.ceil(stop-fallback)), stop)
 
@@ -1681,11 +1699,32 @@ class GearDownInTransit(MultistateDerivedParameterNode):
                     transit for transit in transits
                     if not slices_overlap(transit, gear_moving_up)
                 ]
-            runs = transits
 
-            if family and family.value == 'B737 Classic' and fallback:
+                if gear_red:
+                    # Dataframes show spurious Gear Red Warnings.
+                    # Only consider transits within a reasonable range of Gear Down.
+                    gear_downs = find_edges_on_state_change(
+                        'Down',
+                        nearest_neighbour_mask_repair(gear_up.array),
+                        phase=slices_extend(airborne.get_slices(), 1))  # Extend Airborne slices by 1 sample for low freq Gear Down
+                    gear_moving_downs = [
+                        slice(
+                            max(gear_down_edge - duration, 0),
+                            min(gear_down_edge + duration, len(self.array))
+                        )
+                        for gear_down_edge in gear_downs
+                    ]
+                    transits = [
+                                transit for gear_moving_down in gear_moving_downs
+                                for transit in transits
+                                if slices_overlap(transit, gear_moving_down)
+                            ]
+
+                runs = transits
+
+            if family and family.value == 'B737 Classic' and extend_duration:
                 for idx, run in enumerate(runs):
-                    if slice_duration(run, self.frequency) > fallback:
+                    if slice_duration(run, self.frequency) > extend_duration:
                         stop = run.stop
                         runs[idx] = slice(int(math.ceil(stop-fallback)), stop)
 
@@ -1767,7 +1806,7 @@ class GearUpInTransit(MultistateDerivedParameterNode):
                model=A('Model'), series=A('Series'), family=A('Family')):
 
         gear_sels = gear_ups = gear_downs = runs = []
-        self.array = np_ma_zeros_like(first_valid_parameter(gear_down, gear_up, gear_up_sel, gear_position).array)
+        self.array = np_ma_zeros_like(first_valid_parameter(gear_down, gear_up, gear_up_sel, gear_position).array, dtype=int)
 
         # work out fallback
         retract_duration = 0
@@ -1799,21 +1838,38 @@ class GearUpInTransit(MultistateDerivedParameterNode):
             gear_downs = find_edges_on_state_change('Down', nearest_neighbour_mask_repair(gear_up.array), phase=airborne)
             # Find transits within a reasonable range
             duration = fallback or 20 * self.frequency
-            for gear_down in gear_downs:
+            for gear_down_edge in gear_downs:
                 gear_moving_down = slice(
-                    max(gear_down - duration, 0),
-                    min(gear_down + duration, len(self.array))
+                    max(gear_down_edge - duration, 0),
+                    min(gear_down_edge + duration, len(self.array))
                 )
                 transits = [
                     transit for transit in transits
                     if not slices_overlap(transit, gear_moving_down)
                 ]
+
+            if gear_red:
+                # Dataframes show spurious Gear Red Warnings.
+                # Only consider transits within a reasonable range of Gear Up.
+                gear_moving_ups = [
+                    slice(
+                        max(gear_up_edge - duration, 0),
+                        min(gear_up_edge + duration, len(self.array))
+                    )
+                    for gear_up_edge in gear_ups
+                ]
+                transits = [
+                            transit for gear_moving_up in gear_moving_ups
+                            for transit in transits
+                            if slices_overlap(transit, gear_moving_up)
+                        ]
+
             gear_up_slices = runs_of_ones(nearest_neighbour_mask_repair(gear_up.array) == 'Up')
             runs = slices_and_not(transits, gear_up_slices)
 
-            if family and family.value == 'B737 Classic' and fallback:
+            if family and family.value == 'B737 Classic' and retract_duration:
                 for idx, run in enumerate(runs):
-                    if slice_duration(run, self.frequency) > fallback:
+                    if slice_duration(run, self.frequency) > retract_duration:
                         stop = run.stop
                         runs[idx] = slice(int(math.ceil(stop-fallback)), stop)
 
@@ -1824,7 +1880,7 @@ class GearUpInTransit(MultistateDerivedParameterNode):
                 stop = min([x for x in transits if x > start] or (None,))
                 if stop is not None:
                     _slice = slice(int(math.ceil(start)), stop+1)
-                    if family and family.value == 'B737 Classic' and fallback and slice_duration(_slice, self.frequency) > fallback:
+                    if family and family.value == 'B737 Classic' and retract_duration and slice_duration(_slice, self.frequency) > retract_duration:
                         _slice = slice(int(math.ceil(start)), start+fallback+1)
                     runs.append(_slice)
 
@@ -1845,11 +1901,33 @@ class GearUpInTransit(MultistateDerivedParameterNode):
                     transit for transit in transits
                     if not slices_overlap(transit, gear_moving_down)
                 ]
+
+            if gear_red:
+                # Dataframes show spurious Gear Red Warnings.
+                # Only consider transits within a reasonable range of Gear Up.
+                gear_ups = find_edges_on_state_change(
+                    'Up',
+                    nearest_neighbour_mask_repair(gear_down.array),
+                    phase=slices_extend(airborne.get_slices(), 1)  # Extend Airborne slices by 1 sample for low freq Gear Down
+                )
+                gear_moving_ups = [
+                    slice(
+                        max(gear_up_edge - duration, 0),
+                        min(gear_up_edge + duration, len(self.array))
+                    )
+                    for gear_up_edge in gear_ups
+                ]
+                transits = [
+                            transit for gear_moving_up in gear_moving_ups
+                            for transit in transits
+                            if slices_overlap(transit, gear_moving_up)
+                        ]
+
             runs = transits
 
-            if family and family.value == 'B737 Classic' and fallback:
+            if family and family.value == 'B737 Classic' and retract_duration:
                 for idx, run in enumerate(runs):
-                    if slice_duration(run, self.frequency) > fallback:
+                    if slice_duration(run, self.frequency) > retract_duration:
                         stop = run.stop
                         runs[idx] = slice(math.ceil(stop-fallback), stop)
 
