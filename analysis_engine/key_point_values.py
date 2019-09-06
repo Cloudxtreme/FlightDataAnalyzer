@@ -11906,8 +11906,10 @@ class EngVibBroadbandMax(KeyPointValueNode):
 
     units = None
 
-    def derive(self, eng_vib_max=P('Eng (*) Vib Broadband Max')):
-        self.create_kpv(*max_value(eng_vib_max.array))
+    def derive(self, eng_vib_max=P('Eng (*) Vib Broadband Max'),
+               any_running=M('Eng (*) Any Running')):
+        running = slices_remove_small_slices(runs_of_ones(any_running.array))
+        self.create_kpvs_within_slices(eng_vib_max.array, running, max_value)
 
 
 ##############################################################################
