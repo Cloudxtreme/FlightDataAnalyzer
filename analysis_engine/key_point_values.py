@@ -13272,6 +13272,30 @@ class HeightMinsToTouchdown(KeyPointValueNode):
 
 
 ##############################################################################
+# Gear
+
+
+class GearExtensionDuration(KeyPointValueNode):
+    '''
+    Duration between Gear Down Selection and Gear being down and locked.
+    '''
+    units = ut.SECOND
+
+    def derive(self, gear_extending=P('Gear Down In Transit'),):
+        self.create_kpvs_from_slice_durations(runs_of_ones(gear_extending.array=='Extending'), self.hz)
+
+
+class GearRetractionDuration(KeyPointValueNode):
+    '''
+    Duration between Gear Up Selection and Gear being fully up.
+    '''
+    units = ut.SECOND
+
+    def derive(self, gear_retracting=P('Gear Up In Transit'),):
+        self.create_kpvs_from_slice_durations(runs_of_ones(gear_retracting.array=='Retracting'), self.hz)
+
+
+##############################################################################
 # Flap
 
 

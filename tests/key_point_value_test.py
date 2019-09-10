@@ -435,6 +435,8 @@ from analysis_engine.key_point_values import (
     FuelQtyWingDifference787Max,
     GearboxChipDetectorWarningDuration,
     GearDownToLandingFlapConfigurationDuration,
+    GearExtensionDuration,
+    GearRetractionDuration,
     GreatCircleDistance,
     GrossWeightAtLiftoff,
     GrossWeightAtTouchdown,
@@ -15368,6 +15370,38 @@ class TestGearDownToLandingFlapConfigurationDuration(unittest.TestCase):
         self.assertEqual(node[0].value, -1.5)
         self.assertEqual(node[1].index, 49.5)
         self.assertEqual(node[1].value, -2.5)
+
+
+class TestGearExtensionDuration(unittest.TestCase):
+    def setUp(self):
+        self.node_class = GearExtensionDuration
+    def test_derive(self):
+        gear_ext = M(name='Gear Down In Transit',
+                     array=np.ma.array([0,0,0,1,1,1,1,1,0,0,0,0,1,1,1,1,0,0,0,0,0]),
+                     values_mapping={0: "-", 1: "Extending"})
+        node = self.node_class()
+        node.derive(gear_ext)
+        self.assertEqual(len(node), 2)
+        self.assertEqual(node[0].index, 3)
+        self.assertEqual(node[0].value, 5)
+        self.assertEqual(node[1].index, 12)
+        self.assertEqual(node[1].value, 4)
+
+
+class TestGearRetractionDuration(unittest.TestCase):
+    def setUp(self):
+        self.node_class = GearRetractionDuration
+    def test_derive(self):
+        gear_ext = M(name='Gear Up In Transit',
+                     array=np.ma.array([0,0,0,1,1,1,1,1,0,0,0,0,1,1,1,1,0,0,0,0,0]),
+                     values_mapping={0: "-", 1: "Retracting"})
+        node = self.node_class()
+        node.derive(gear_ext)
+        self.assertEqual(len(node), 2)
+        self.assertEqual(node[0].index, 3)
+        self.assertEqual(node[0].value, 5)
+        self.assertEqual(node[1].index, 12)
+        self.assertEqual(node[1].value, 4)
 
 
 ##############################################################################
