@@ -19810,13 +19810,14 @@ class DHSelectedAt1500FtLVO(KeyPointValueNode):
                                  alt_descending.get(name='1500 Ft Descending'),
                                  suppress_zeros=True)
 
-class AltitudeQNHDeviationFromAltitudeSelectedMax(KeyPointValueNode):
+class AltitudeDeviationFromAltitudeSelectedMax(KeyPointValueNode):
     '''
-    Altitude QNH deviation from Altitude Selected which could possibly indicate
+    Altitude deviation from Altitude Selected which could possibly indicate
     a level bust.
+
+    Altitude is based off Altitude QNH which is derived from Baro Correction.
     '''
 
-    name = 'Altitude QNH Deviation From Altitude Selected Max'
     units = ut.FT
 
     def derive(self, alt=P('Altitude QNH'),

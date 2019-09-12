@@ -223,7 +223,7 @@ from analysis_engine.key_point_values import (
     AltitudeLastUnstableDuringLastApproachExcludingEngThrust,
     AltitudeMax,
     AltitudeOvershootAtSuspectedLevelBust,
-    AltitudeQNHDeviationFromAltitudeSelectedMax,
+    AltitudeDeviationFromAltitudeSelectedMax,
     AltitudeAALCleanConfigurationMin,
     AltitudeWithFlapMax,
     AltitudeSTDWithGearDownMax,
@@ -22110,12 +22110,18 @@ class TestTransmitInactivityDuration(unittest.TestCase, NodeTest):
         self.assertAlmostEqual(node[0].value, 3)
 
 
-class TestAltitudeQNHDeviationfromAltitudeSelectedMax(unittest.TestCase, NodeTest):
+class TestAltitudeDeviationfromAltitudeSelectedMax(unittest.TestCase, NodeTest):
 	def setUp(self):
-		self.node_class = AltitudeQNHDeviationFromAltitudeSelectedMax
+		self.node_class = AltitudeDeviationFromAltitudeSelectedMax
 		self.operational_combinations = [
 		    ('Altitude QNH', 'Altitude Selected', 'Airborne', 'Approach And Landing'),
 		]
+
+	def test_attributes(self):
+		node = self.node_class()
+		self.assertEqual(node.units, ut.FT)
+		self.assertEqual(node.name,
+			             'Altitude Deviation From Altitude Selected Max')
 
 	def test_climb_and_maintain(self):
 		airborne = buildsection('Airborne', 0, 10)
