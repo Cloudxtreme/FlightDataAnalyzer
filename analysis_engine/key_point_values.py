@@ -3,6 +3,7 @@
 from __future__ import print_function
 
 import numpy as np
+from numpy.ma.extras import _ezclump as ezclump
 import operator
 import re
 import six
@@ -35,7 +36,6 @@ from analysis_engine.library import (
     cycle_counter,
     cycle_finder,
     cycle_select,
-    ezclump,
     find_edges,
     find_edges_on_state_change,
     first_valid_parameter,
