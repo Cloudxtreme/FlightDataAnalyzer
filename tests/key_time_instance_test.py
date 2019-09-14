@@ -414,6 +414,24 @@ class TestClimbAccelerationStart(unittest.TestCase):
         # Falls back to 800 Ft
         self.assertAlmostEqual(node[0].index, 527, places=0)
 
+    def test_derive_spd_sel_after_flap_retraction(self):
+        array = np.ma.concatenate((np.ones(29) * 111, np.arange(110, 181)))
+        spd = Parameter('Airspeed', array=array)
+        spd_sel = Parameter(
+            'Airspeed Selected',
+            array=np.ma.concatenate((np.ones(90) * 111, np.ones(10) * 180))
+        )
+        flap = KTI('Flap Lever Set', items=[KeyTimeInstance(80, name='Flap 0 Set')])
+        init_climbs = buildsection('Initial Climb', 5, 40)
+        alt_climbing = AltitudeWhenClimbing(
+            items=[KeyTimeInstance(99, name='4000 Ft Climbing')]
+        )
+        node = self.node_class()
+        node.derive(None, init_climbs, alt_climbing, spd_sel, None, None, None, None, spd, flap)
+        self.assertEqual(len(node), 1)
+        # With moving average over 11 samples, half window is 5 samples to the left
+        self.assertEqual(node[0].index, 30-5)
+
 
 class TestClimbThrustDerateDeselected(unittest.TestCase):
     def test_can_operate(self):
