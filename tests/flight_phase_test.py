@@ -3267,6 +3267,7 @@ class TestBaroDifference(unittest.TestCase):
 
     def setUp(self):
         self.node_class = BaroDifference
+        self.fast = buildsection('Fast', 0, 80)
 
     def test_derive_baro_difference(self):
         baro_capt = P('Baro Correction (Capt)',
@@ -3284,7 +3285,7 @@ class TestBaroDifference(unittest.TestCase):
                     frequency=1./4)
 
         node = self.node_class()
-        node.get_derived((baro_capt, baro_fo))
+        node.get_derived((baro_capt, baro_fo, self.fast))
 
         self.assertEqual(len(node), 2)
         self.assertEqual(node.get_slices(), [
@@ -3309,7 +3310,7 @@ class TestBaroDifference(unittest.TestCase):
                     frequency=1./4)
 
         node = self.node_class()
-        node.get_derived((baro_capt, baro_fo))
+        node.get_derived((baro_capt, baro_fo, self.fast))
 
         self.assertEqual(len(node), 0)
 
@@ -3330,7 +3331,32 @@ class TestBaroDifference(unittest.TestCase):
                     frequency=1./4)
 
         node = self.node_class()
-        node.get_derived((baro_capt, baro_fo))
+        node.get_derived((baro_capt, baro_fo, self.fast))
 
         self.assertEqual(len(node), 0)
 
+    def test_outside_fast_section(self):
+        baro_capt = P('Baro Correction (Capt)',
+                      array=np.ma.concatenate([
+                          np.ma.ones(3) * 995,
+                          np.ma.ones(7) * 998,
+                          np.ma.ones(10) * 1013
+                          ]),
+                      frequency=1./4)
+        baro_fo = P('Baro Correction (FO)',
+                    array=np.ma.concatenate([
+                        np.ma.ones(15) * 998,
+                        np.ma.ones(5) * 1013
+                        ]),
+                    frequency=1./4)
+        fast = buildsection('Fast', 15, 70)
+
+        node = self.node_class()
+        node.get_derived((baro_capt, baro_fo, fast))
+
+        self.assertEqual(len(node), 1)
+        self.assertEqual(node.get_slices(), [
+                slice(10, 15, None)
+            ])
+
+        self.assertEqual(node.frequency, 1./4.)
