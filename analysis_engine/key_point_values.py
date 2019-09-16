@@ -1328,6 +1328,43 @@ class AirspeedGustsDuringFinalApproach(KeyPointValueNode):
                 self.create_kpv(index, value)
 
 
+class AirspeedDeviationFromAirspeedSelectedDuration(KeyPointValueNode):
+    '''
+    Airspeed deviation from Airspeed Selected which could help identify low
+    airspeed trends away from Airspeed Selected.
+    '''
+
+    units = ut.KT
+
+    def derive(self, spd=P('Airspeed'),
+               spd_sel=P('Airspeed Selected'),
+               airs=S('Airborne')):
+
+        dist = spd.array - spd_sel.array
+        dist = mask_outside_slices(dist, airs.get_slices())
+        # Mask out when Airspeed Selected is changing
+        spd_sel_change = np.ma.ediff1d(spd_sel.array, to_end=0.0)
+        dist[spd_sel_change != 0.0] = np.ma.masked
+        # clumps = np.ma.clump_unmasked(dist)
+
+        # Find Airspeed moving away from Airspeed Selected
+        # Mask out where dist is less than 10 kt
+        dist[np.abs(dist) < 10] = np.ma.masked
+        spd_change = np.ma.ediff1d(dist, to_end=0.0)
+        dist_sign = np.sign(dist)
+        spd_change_sign = np.sign(spd_change)
+        combination = dist_sign * spd_change_sign
+        # Airspeed moving away from Airspeed Selected means dist is positive and
+        # spd_change is positive or dist is negative and spd_change is negative.
+        # So multiplying both signs always produces a positive number in that case.
+        spd_drifting = combination > 0
+        # Filter out small spd_change
+        # spd_drifting[np.abs(spd_change) < 5] = 0
+
+        # Measure max duration of spd_drifting
+        
+
+
 ########################################
 # Airspeed: Climbing
 
