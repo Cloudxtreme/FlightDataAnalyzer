@@ -3,6 +3,7 @@
 from __future__ import print_function
 
 import numpy as np
+from numpy.ma.extras import _ezclump as ezclump
 import operator
 import re
 import six
@@ -1344,8 +1345,10 @@ class AirspeedDeviationFromAirspeedSelectedDuration(KeyPointValueNode):
         dist = mask_outside_slices(dist, airs.get_slices())
         # Mask out when Airspeed Selected is changing
         spd_sel_change = np.ma.ediff1d(spd_sel.array, to_end=0.0)
-        dist[spd_sel_change != 0.0] = np.ma.masked
-        # clumps = np.ma.clump_unmasked(dist)
+        dist[np.ma.abs(spd_sel_change) > 1.0] = np.ma.masked
+
+        # Mask out deviations above Airspeed Selected (do we want to do that?)
+        # dist[dist > 0] = np.ma.masked
 
         # Find Airspeed moving away from Airspeed Selected
         # Mask out where dist is less than 10 kt
@@ -1353,16 +1356,21 @@ class AirspeedDeviationFromAirspeedSelectedDuration(KeyPointValueNode):
         spd_change = np.ma.ediff1d(dist, to_end=0.0)
         dist_sign = np.sign(dist)
         spd_change_sign = np.sign(spd_change)
-        combination = dist_sign * spd_change_sign
+        sign = dist_sign * spd_change_sign
         # Airspeed moving away from Airspeed Selected means dist is positive and
         # spd_change is positive or dist is negative and spd_change is negative.
         # So multiplying both signs always produces a positive number in that case.
-        spd_drifting = combination > 0
-        # Filter out small spd_change
-        # spd_drifting[np.abs(spd_change) < 5] = 0
+        spd_drifting = sign > 0
 
         # Measure max duration of spd_drifting
-        
+        drifting_slices = ezclump(spd_drifting.data & ~spd_drifting.mask)
+        self.create_kpvs_from_slice_durations(
+            drifting_slices,
+            self.frequency,
+            min_duration=10.0
+        )
+
+
 
 
 ########################################
