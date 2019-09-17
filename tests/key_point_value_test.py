@@ -113,6 +113,7 @@ from analysis_engine.key_point_values import (
     AirspeedAtThrustReversersSelection,
     AirspeedAtTouchdown,
     AirspeedBelow10000FtDuringDescentMax,
+    AirspeedBelowAirspeedSelectedDurationMax,
     AirspeedDifference5SecMax,
     AirspeedDuringCruiseMax,
     AirspeedDuringCruiseMin,
@@ -2791,6 +2792,88 @@ class TestAirspeedGustsDuringFinalApproach(unittest.TestCase, NodeTest):
         kpv.get_derived([air_spd, gnd_spd, alt_rad, airborne])
         self.assertEqual(kpv[0].value, 25)
         self.assertEqual(kpv[0].index, 4.75)
+
+
+class TestAirspeedBelowAirspeedSelectedDurationMax(unittest.TestCase, NodeTest):
+
+    def setUp(self):
+        self.node_class = AirspeedBelowAirspeedSelectedDurationMax
+        self.operational_combinations = [('Airspeed', 'Airspeed Selected', 'Airborne')]
+
+    def test_derive(self):
+        array = np.ma.ones(50) * 130
+        spd_sel = P('Airspeed Selected', array=array)
+        array = np.ma.arange(140, 90, -1)
+        spd = P('Airpseed', array=array)
+        airs = buildsection('Airborne', 0, 50)
+
+        node = self.node_class()
+        node.derive(spd, spd_sel, airs)
+
+        self.assertEqual(len(node), 1)
+        self.assertEqual(node[0].index, 20)
+        self.assertEqual(node[0].value, 50-20)
+
+    def test_two_durations(self):
+        array = np.ma.ones(100) * 130
+        spd_sel = P('Airspeed Selected', array=array)
+        array = np.ma.concatenate([
+            np.linspace(140, 100, num=40),
+            np.linspace(140, 80, num=60),
+            ])
+        spd = P('Airpseed', array=array)
+        airs = buildsection('Airborne', 0, 100)
+
+        node = self.node_class()
+        node.derive(spd, spd_sel, airs)
+
+        self.assertEqual(len(node), 1)
+        self.assertEqual(node[0].index, 60)
+        self.assertEqual(node[0].value, 40)
+
+    def test_within_airborne(self):
+        array = np.ma.ones(120) * 130
+        spd_sel = P('Airspeed Selected', array=array)
+        array = np.ma.concatenate([
+            np.linspace(140, 85, num=55),
+            np.linspace(140, 75, num=65),
+            ])
+        spd = P('Airpseed', array=array)
+        airs = buildsection('Airborne', 0, 70)
+
+        node = self.node_class()
+        node.derive(spd, spd_sel, airs)
+
+        self.assertEqual(len(node), 1)
+        self.assertEqual(node[0].index, 20)
+        self.assertEqual(node[0].value, 30)  # 35-5 due to moving average
+
+    def test_small_freq_params(self):
+        array = np.ma.ones(50) * 130
+        spd_sel = P('Airspeed Selected', array=array, frequency=0.5)
+        array = np.ma.arange(140, 90, -1)
+        spd = P('Airpseed', array=array, frequency=0.5)
+        airs = buildsection('Airborne', 0, 50)
+        airs.frequency = 0.5
+
+        node = self.node_class()
+        node.get_derived((spd, spd_sel, airs))
+
+        self.assertEqual(len(node), 1)
+        self.assertEqual(node[0].index, 20)
+        self.assertEqual(node[0].value, (50-20) * 2)
+
+    def test_discard_small_durations(self):
+        array = np.ma.ones(50) * 130
+        spd_sel = P('Airspeed Selected', array=array)
+        array = np.ma.arange(150, 100, -1)
+        spd = P('Airpseed', array=array)
+        airs = buildsection('Airborne', 0, 50)
+
+        node = self.node_class()
+        node.derive(spd, spd_sel, airs)
+
+        self.assertEqual(len(node), 0)
 
 
 ########################################
