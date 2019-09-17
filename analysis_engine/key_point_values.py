@@ -1329,10 +1329,13 @@ class AirspeedGustsDuringFinalApproach(KeyPointValueNode):
                 self.create_kpv(index, value)
 
 
-class AirspeedDeviationFromAirspeedSelectedDuration(KeyPointValueNode):
+class AirspeedBelowAirspeedSelectedDurationMax(KeyPointValueNode):
     '''
-    Airspeed deviation from Airspeed Selected which could help identify low
-    airspeed trends away from Airspeed Selected.
+    Duration when Airspeed dropped below Airspeed Selected by at least 10 kt
+    and constantly decreased. This helps identify low airspeed trends away
+    from Airspeed Selected.
+
+    Only durations of at least 20 seconds are considered.
     '''
 
     units = ut.KT
@@ -1341,11 +1344,7 @@ class AirspeedDeviationFromAirspeedSelectedDuration(KeyPointValueNode):
                spd_sel=P('Airspeed Selected'),
                airs=S('Airborne')):
 
-        use_airspeed_moving_avg = True
-        if use_airspeed_moving_avg:
-            mov_spd_array = moving_average(spd.array)
-        else:
-            mov_spd_array = spd.array
+        mov_spd_array = moving_average(spd.array)
 
         dist = mov_spd_array - spd_sel.array
         dist = mask_outside_slices(dist, airs.get_slices())
@@ -1353,42 +1352,31 @@ class AirspeedDeviationFromAirspeedSelectedDuration(KeyPointValueNode):
         spd_sel_change = np.ma.ediff1d(spd_sel.array, to_end=0.0)
         dist[np.ma.abs(spd_sel_change) > 1.0] = np.ma.masked
 
-        # Mask out deviations above Airspeed Selected (do we want to do that?)
-        # dist[dist > 0] = np.ma.masked
+        # Mask out deviations above Airspeed Selected
+        dist[dist > 0] = np.ma.masked
 
         # Find Airspeed moving away from Airspeed Selected
         # Mask out where dist is less than 10 kt
         dist[np.abs(dist) < 10] = np.ma.masked
         spd_change = np.ma.ediff1d(mov_spd_array, to_end=0.0)
-        dist_sign = np.sign(dist)
-        spd_change_sign = np.sign(spd_change)
-        sign = dist_sign * spd_change_sign
         # Airspeed moving away from Airspeed Selected means dist is positive and
         # spd_change is positive or dist is negative and spd_change is negative.
         # So multiplying both signs always produces a positive number in that case.
+        dist_sign = np.sign(dist)
+        spd_change_sign = np.sign(spd_change)
+        sign = dist_sign * spd_change_sign
         spd_drifting = sign >= 0
+        spd_drifting = spd_drifting.data & ~spd_drifting.mask
 
         # Measure max duration of spd_drifting
-        drifting_slices = ezclump(spd_drifting.data & ~spd_drifting.mask)
-
-        # For debugging purposes:
-        spd_drift_away = spd.array.copy()
-        spd_drift_away.mask = spd_drift_away.mask | ~(spd_drifting.data & ~spd_drifting.mask)
-        import matplotlib.pyplot as plt
-        plt.plot(spd.array)
-        plt.plot(mov_spd_array, "green")
-        plt.plot(spd_sel.array, "magenta")
-        plt.plot(spd_drift_away, "r")
-        plt.plot(spd_drift_away, "ro")
-        plt.show()
-
-        self.create_kpvs_from_slice_durations(
-            drifting_slices,
-            self.frequency,
-            min_duration=10.0
+        max_slice = max(
+            ezclump(spd_drifting),
+            key=lambda s: slice_duration(s, self.hz)
         )
 
-
+        duration = slice_duration(max_slice, self.hz)
+        if duration > 20:
+            self.create_kpv(max_slice.start, slice_duration(max_slice, self.hz))
 
 
 ########################################
