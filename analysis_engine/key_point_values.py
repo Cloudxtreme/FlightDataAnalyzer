@@ -1341,7 +1341,13 @@ class AirspeedDeviationFromAirspeedSelectedDuration(KeyPointValueNode):
                spd_sel=P('Airspeed Selected'),
                airs=S('Airborne')):
 
-        dist = spd.array - spd_sel.array
+        use_airspeed_moving_avg = True
+        if use_airspeed_moving_avg:
+            mov_spd_array = moving_average(spd.array)
+        else:
+            mov_spd_array = spd.array
+
+        dist = mov_spd_array - spd_sel.array
         dist = mask_outside_slices(dist, airs.get_slices())
         # Mask out when Airspeed Selected is changing
         spd_sel_change = np.ma.ediff1d(spd_sel.array, to_end=0.0)
@@ -1353,17 +1359,29 @@ class AirspeedDeviationFromAirspeedSelectedDuration(KeyPointValueNode):
         # Find Airspeed moving away from Airspeed Selected
         # Mask out where dist is less than 10 kt
         dist[np.abs(dist) < 10] = np.ma.masked
-        spd_change = np.ma.ediff1d(dist, to_end=0.0)
+        spd_change = np.ma.ediff1d(mov_spd_array, to_end=0.0)
         dist_sign = np.sign(dist)
         spd_change_sign = np.sign(spd_change)
         sign = dist_sign * spd_change_sign
         # Airspeed moving away from Airspeed Selected means dist is positive and
         # spd_change is positive or dist is negative and spd_change is negative.
         # So multiplying both signs always produces a positive number in that case.
-        spd_drifting = sign > 0
+        spd_drifting = sign >= 0
 
         # Measure max duration of spd_drifting
         drifting_slices = ezclump(spd_drifting.data & ~spd_drifting.mask)
+
+        # For debugging purposes:
+        spd_drift_away = spd.array.copy()
+        spd_drift_away.mask = spd_drift_away.mask | ~(spd_drifting.data & ~spd_drifting.mask)
+        import matplotlib.pyplot as plt
+        plt.plot(spd.array)
+        plt.plot(mov_spd_array, "green")
+        plt.plot(spd_sel.array, "magenta")
+        plt.plot(spd_drift_away, "r")
+        plt.plot(spd_drift_away, "ro")
+        plt.show()
+
         self.create_kpvs_from_slice_durations(
             drifting_slices,
             self.frequency,
