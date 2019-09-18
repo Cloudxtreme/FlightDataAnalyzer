@@ -95,11 +95,70 @@ test_data_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 
 class NodeTest(object):
 
+    def generate_attributes(self, manufacturer):
+        if manufacturer == 'boeing':
+            _am = A('Model', 'B737-333')
+            _as = A('Series', 'B737-300')
+            _af = A('Family', 'B737 Classic')
+            _et = A('Engine Type', 'CFM56-3B1')
+            _es = A('Engine Series', 'CFM56-3')
+            return (_am, _as, _af, _et, _es)
+        if manufacturer == 'airbus':
+            _am = A('Model', 'A330-333')
+            _as = A('Series', 'A330-300')
+            _af = A('Family', 'A330')
+            _et = A('Engine Type', 'Trent 772B-60')
+            _es = A('Engine Series', 'Trent 772B')
+            return (_am, _as, _af, _et, _es)
+        if manufacturer == 'beechcraft':
+            _am = A('Model', '1900D')
+            _as = A('Series', '1900D')
+            _af = A('Family', '1900')
+            _et = A('Engine Type', 'PT6A-67D')
+            _es = A('Engine Series', 'PT6A')
+            return (_am, _as, _af, _et, _es)
+        raise ValueError('Unexpected lookup for attributes.')
+
     def test_can_operate(self):
-        self.assertEqual(
-            self.node_class.get_operational_combinations(),
-            self.operational_combinations,
-        )
+        if not hasattr(self, 'node_class'):
+            return
+        kwargs = getattr(self, 'can_operate_kwargs', {})
+        if getattr(self, 'check_operational_combination_length_only', False):
+            self.assertEqual(
+                len(self.node_class.get_operational_combinations(**kwargs)),
+                self.operational_combination_length,
+            )
+        else:
+            combinations = list(map(set, self.node_class.get_operational_combinations(**kwargs)))
+            for combination in map(set, self.operational_combinations):
+                self.assertIn(combination, combinations)
+
+    def get_params_from_hdf(self, hdf_path, param_names, _slice=None,
+                            phase_name='Phase'):
+        import shutil
+        import tempfile
+        from hdfaccess.file import hdf_file
+        from analysis_engine.node import derived_param_from_hdf
+
+        params = []
+        phase = None
+
+        with tempfile.NamedTemporaryFile() as temp_file:
+            shutil.copy(hdf_path, temp_file.name)
+
+            with hdf_file(temp_file.name) as hdf:
+                for param_name in param_names:
+                    p = hdf.get(param_name)
+                    if p is not None:
+                        p = derived_param_from_hdf(p)
+                    params.append(p)
+
+        if _slice:
+            phase = S(name=phase_name, frequency=1)
+            phase.create_section(_slice)
+            phase = phase.get_aligned(params[0])
+
+        return params, phase
 
 
 ##############################################################################
