@@ -7936,7 +7936,7 @@ class TestBaroCorrectionMinus1013Above20000FtMax(unittest.TestCase, NodeTest):
                         np.linspace(30000, 0, num=31)
                     ]))
         baro = P('Baro Correction', array=np.ma.ones(90) * 1010)
-        values_mapping = {0: 'ALT QFE', 1: 'ALT STD', 2: 'ALT QNH'}
+        values_mapping = {0: 'QFE', 1: 'STD', 2: 'QNH', 3: 'Not Used'}
         baro_sel_cpt = M(
             'Baro Setting Selection (Capt)',
             array=np.ma.concatenate([

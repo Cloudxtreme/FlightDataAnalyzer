@@ -6268,8 +6268,8 @@ class BaroCorrectionMinus1013Above20000FtDuringLevelFlightMax(KeyPointValueNode)
             if baro_sel:
                 baro_dev[baro_sel.array == 'ALT STD'] = 0
             elif baro_sel_cpt and baro_sel_fo:
-                baro_dev[baro_sel_cpt.array == 'ALT STD'] = 0
-                baro_dev[baro_sel_fo.array == 'ALT STD'] = 0
+                baro_dev[baro_sel_cpt.array == 'STD'] = 0
+                baro_dev[baro_sel_fo.array == 'STD'] = 0
             _, significant_diffs = slices_above(baro_dev, 1)
             above_20000ft_level = slices_and(above_20000ft_level, significant_diffs)
             above_20000ft_level = slices_int(above_20000ft_level)
