@@ -3450,7 +3450,7 @@ class TestBaroDifference(unittest.TestCase, NodeTest):
                 np.ones(10, dtype=np.int) * 2,
                 np.ones(10, dtype=np.int) * 1,
             ]),
-            values_mapping={0: 'ALT QFE', 1: 'ALT STD', 2: 'ALT QNH'},
+            values_mapping={0: 'QFE', 1: 'STD', 2: 'QNH', 3: 'Not Used'},
             frequency=1./4
         )
         baro_sel_fo = M(
@@ -3459,7 +3459,7 @@ class TestBaroDifference(unittest.TestCase, NodeTest):
                 np.ones(10, dtype=np.int) * 2,
                 np.ones(10, dtype=np.int) * 1,
             ]),
-            values_mapping={0: 'ALT QFE', 1: 'ALT STD', 2: 'ALT QNH'},
+            values_mapping={0: 'QFE', 1: 'STD', 2: 'QNH', 3: 'Not Used'},
             frequency=1./4
         )
 
