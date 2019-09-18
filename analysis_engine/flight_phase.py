@@ -2388,12 +2388,24 @@ class BaroDifference(FlightPhaseNode):
     Minimum 10 sec duration.
     """
 
+    @classmethod
+    def can_operate(cls, available):
+        return all_of(('Baro Correction (Capt)', 'Baro Correction (FO)'), available)
+
     def derive(self, baro_cpt=P('Baro Correction (Capt)'),
-               baro_fo=P('Baro Correction (FO)')):
+               baro_fo=P('Baro Correction (FO)'),
+               baro_sel=M('Baro Setting Selection'),
+               baro_sel_cpt=M('Baro Setting Selection (Capt)'),
+               baro_sel_fo=M('Baro Setting Selection (FO)')):
 
         diff = abs(baro_cpt.array - baro_fo.array)
         if not np.ma.count(diff):
             return
+        if baro_sel:
+            diff[baro_sel.array == 'ALT STD'] = 0
+        elif baro_sel_cpt and baro_sel_fo:
+            diff[baro_sel_cpt.array == 'ALT STD'] = 0
+            diff[baro_sel_fo.array == 'ALT STD'] = 0
         _, diff_slices = slices_above(diff, 1.0)
         diff_slices = filter_slices_duration(diff_slices, 10, frequency=self.hz)
         if self.hz < 0.25:  # handle slices from superframe parameters extending beyond end of flight

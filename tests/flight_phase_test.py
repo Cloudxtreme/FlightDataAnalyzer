@@ -3322,10 +3322,13 @@ class TestTakeoffRunwayHeading(unittest.TestCase):
             slice(2525, 2632, None)
         ])
 
-class TestBaroDifference(unittest.TestCase):
+class TestBaroDifference(unittest.TestCase, NodeTest):
 
     def setUp(self):
         self.node_class = BaroDifference
+        self.operational_combinations = [
+            ('Baro Correction (Capt)', 'Baro Correction (FO)')
+        ]
 
     def test_derive_baro_difference(self):
         baro_capt = P('Baro Correction (Capt)',
@@ -3343,7 +3346,7 @@ class TestBaroDifference(unittest.TestCase):
                     frequency=1./4)
 
         node = self.node_class()
-        node.get_derived((baro_capt, baro_fo))
+        node.get_derived((baro_capt, baro_fo, None, None, None))
 
         self.assertEqual(len(node), 2)
         self.assertEqual(node.get_slices(), [
@@ -3368,7 +3371,7 @@ class TestBaroDifference(unittest.TestCase):
                     frequency=1./4)
 
         node = self.node_class()
-        node.get_derived((baro_capt, baro_fo))
+        node.get_derived((baro_capt, baro_fo, None, None, None))
 
         self.assertEqual(len(node), 0)
 
@@ -3389,7 +3392,83 @@ class TestBaroDifference(unittest.TestCase):
                     frequency=1./4)
 
         node = self.node_class()
-        node.get_derived((baro_capt, baro_fo))
+        node.get_derived((baro_capt, baro_fo, None, None, None))
 
         self.assertEqual(len(node), 0)
 
+    def test_bar_sel(self):
+        baro_capt = P('Baro Correction (Capt)',
+                      array=np.ma.concatenate([
+                          np.ma.ones(3) * 995,
+                          np.ma.ones(7) * 998,
+                          np.ma.ones(10) * 1013
+                          ]),
+                      frequency=1./4)
+        baro_fo = P('Baro Correction (FO)',
+                    array=np.ma.concatenate([
+                        np.ma.ones(15) * 998,
+                        np.ma.ones(5) * 1013
+                        ]),
+                    frequency=1./4)
+        baro_sel = M(
+            'Baro Setting Selection',
+            array=np.ma.concatenate([
+                np.ones(10, dtype=np.int) * 2,
+                np.ones(10, dtype=np.int) * 1,
+            ]),
+            values_mapping={0: 'ALT QFE', 1: 'ALT STD', 2: 'ALT QNH'},
+            frequency=1./4
+        )
+
+        node = self.node_class()
+        node.get_derived((baro_capt, baro_fo, baro_sel, None, None))
+
+        self.assertEqual(len(node), 1)
+        self.assertEqual(node.get_slices(), [
+                slice(0, 3, None),
+            ])
+
+        self.assertEqual(node.frequency, 1./4.)
+
+    def test_bar_sel_cpt_fo(self):
+        baro_capt = P('Baro Correction (Capt)',
+                      array=np.ma.concatenate([
+                          np.ma.ones(3) * 995,
+                          np.ma.ones(7) * 998,
+                          np.ma.ones(10) * 1013
+                          ]),
+                      frequency=1./4)
+        baro_fo = P('Baro Correction (FO)',
+                    array=np.ma.concatenate([
+                        np.ma.ones(15) * 998,
+                        np.ma.ones(5) * 1013
+                        ]),
+                    frequency=1./4)
+        baro_sel_cpt = M(
+            'Baro Setting Selection (Capt)',
+            array=np.ma.concatenate([
+                np.ones(10, dtype=np.int) * 2,
+                np.ones(10, dtype=np.int) * 1,
+            ]),
+            values_mapping={0: 'ALT QFE', 1: 'ALT STD', 2: 'ALT QNH'},
+            frequency=1./4
+        )
+        baro_sel_fo = M(
+            'Baro Setting Selection (FO)',
+            array=np.ma.concatenate([
+                np.ones(10, dtype=np.int) * 2,
+                np.ones(10, dtype=np.int) * 1,
+            ]),
+            values_mapping={0: 'ALT QFE', 1: 'ALT STD', 2: 'ALT QNH'},
+            frequency=1./4
+        )
+
+        node = self.node_class()
+        node.get_derived((baro_capt, baro_fo, None, baro_sel_cpt, baro_sel_fo))
+
+        self.assertEqual(len(node), 1)
+        self.assertEqual(node.get_slices(), [
+                slice(0, 3, None),
+            ])
+
+        self.assertEqual(node.frequency, 1./4.)
