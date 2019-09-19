@@ -124,6 +124,7 @@ from analysis_engine.helicopter.key_point_values import (
     SATMin,
     SATRateOfChangeMax,
     CruiseGuideIndicatorMax,
+    TailRotorPedalOnGroundMax,
     TGBOilTempMax,
     TrainingModeDuration,
     HoverHeightDuringOffshoreTakeoffMax,
@@ -1479,6 +1480,34 @@ class TestTailRotorPedalWhileTaxiingMin(unittest.TestCase):
         self.assertEqual(len(node), 1)
         self.assertEqual(node[0].index, 149)
         self.assertAlmostEqual(node[0].value, -6.990, places=3)
+
+
+class TestTailRotorPedalOnGroundMax(unittest.TestCase):
+
+    def setUp(self):
+        self.node_class = TailRotorPedalOnGroundMax
+
+    def test_can_operate(self):
+        self.assertEqual(self.node_class.get_operational_combinations(ac_type=aeroplane), [])
+        opts = self.node_class.get_operational_combinations(ac_type=helicopter)
+        self.assertEqual(opts, [('Collective', 'Nr', 'Grounded', 'Stationary',
+                                 'Tail Rotor Pedal')])
+
+    def test_derive(self):
+        grounded = buildsection('Grounded', 10, 90)
+        stationary = buildsection('Stationary', 15, 85)
+        nr = P('Nr', np.ma.arange(95, 110, 0.15))
+        collective = P('Collective', np.ma.arange(0, 10, 0.1))
+
+        x = np.linspace(-10, 10, 800)
+        pedal = P('Tail Rotor Pedal', (-x*np.cos(x)), frequency=8)
+
+        node = self.node_class()
+        node.derive(collective, nr, grounded, stationary, pedal)
+
+        self.assertEqual(len(node), 1)
+        self.assertEqual(node[0].index, 34)
+        self.assertAlmostEqual(node[0].value, -8.803, places=3)
 
 
 ##############################################################################

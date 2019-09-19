@@ -486,6 +486,46 @@ class TailRotorPedalWhileTaxiingMin(KeyPointValueNode):
                                        min_value)
 
 
+class TailRotorPedalOnGroundMax(KeyPointValueNode):
+    '''
+    Maximum recorded value, maintained for at least 5s, of Tail Rotor Pedal with:
+     - Collective < 30%
+     - Nr > 100%
+     - In phase Grounded and Stationary
+    Uses second window to find the highest (absolute) value maintained for at
+    least 5 seconds.
+    Helicopter only.
+    '''
+    can_operate = helicopter_only
+
+    units = ut.PERCENT
+
+    def derive(self,
+               collective=P('Collective'),
+               nr=P('Nr'),
+               grounded=S('Grounded'),
+               stationary=S('Stationary'),
+               pedal=P('Tail Rotor Pedal'),):
+
+        # Collective below 30%
+        collective_slices = slices_below(collective.array, 30)
+
+        # Nr above 100%
+        nr_slices = slices_above(nr.array, 100)
+
+        # We need to be on ground and stationary - we're not interested in taxi and/or liftoff
+        on_ground = slices_and(stationary.get_slices(), grounded.get_slices())
+
+        # Combine all of the above into a list of slices, remove gaps <10s
+        sections = slices_remove_small_gaps(slices_and(on_ground, slices_and(collective_slices[1], nr_slices[1])), time_limit=10, hz=self.hz)
+
+        # Mask pedal outside slices for use in second_window
+        pedal_within_slices = mask_outside_slices(pedal.array, sections)
+        window_array = second_window(pedal_within_slices, pedal.hz, 5)
+
+        self.create_kpvs_within_slices(window_array, np.ma.clump_unmasked(window_array), max_abs_value)
+
+
 ##############################################################################
 # Cyclic
 
