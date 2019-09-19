@@ -2404,8 +2404,7 @@ class BaroDifference(FlightPhaseNode):
         if baro_sel:
             diff[baro_sel.array == 'ALT STD'] = 0
         elif baro_sel_cpt and baro_sel_fo:
-            diff[baro_sel_cpt.array == 'STD'] = 0
-            diff[baro_sel_fo.array == 'STD'] = 0
+            diff[(baro_sel_cpt.array == 'STD') | (baro_sel_fo.array == 'STD')] = 0
         _, diff_slices = slices_above(diff, 1.0)
         diff_slices = filter_slices_duration(diff_slices, 10, frequency=self.hz)
         if self.hz < 0.25:  # handle slices from superframe parameters extending beyond end of flight
