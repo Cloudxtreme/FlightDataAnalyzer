@@ -6770,7 +6770,16 @@ def including_transition(array, steps, hz=1, mode='include'):
         mid_steps.append((step_1 + step_2) / 2.0)
     mid_steps.append(steps[-1] + 10.0)
 
-    change = np.ma.ediff1d(array, to_begin=0.0)
+    change = rate_of_change_array(array, hz)
+    # change will show non null values a bit too soon as the function is looking
+    # over multiple samples (a window). We want to check the edges of the periods
+    # where there is a change and overwrite it with the value given by a
+    # simple ediff1d
+    significant_roc = np.ma.abs(change) > 0.03
+    edges = np_ma_zeros_like(significant_roc, dtype=np.bool)
+    edges[1:] = significant_roc[1:] ^ significant_roc[:-1]
+    sample_change = np.ma.ediff1d(array, to_begin=0.0)
+    change[edges] = sample_change[edges]
 
     # first raise the array to the next step if it exceeds the previous step
     # plus a minimal threshold (step as early as possible)
@@ -6792,21 +6801,20 @@ def including_transition(array, steps, hz=1, mode='include'):
             if np.ma.count(partial):
                 # Unchanged data can be included in our output flap array directly
                 output[band] = partial
-            else:
-                # The data did not have a still moment, so see if it passed
-                # through the flap setting of interest.
-                index = index_at_value(array[band], flap)
-                if index:
-                    if array[band.start:band.stop][-1] > array[band.start]:
-                        # Going up
-                        output[int(index + band.start - 1)] = flap
-                    else:
-                        # Going down
-                        output[int(index + band.start + 1)] = flap
+
+            # See if it passed through the flap setting of interest.
+            index = index_at_value(array[band], flap)
+            if index:
+                if array[band.start:band.stop][-1] > array[band.start]:
+                    # Going up
+                    output[floor(index + band.start)] = flap
                 else:
-                    # The data may have just crept into this band without being a
-                    # true change into the new flap setting. Let's just ignore this.
-                    pass
+                    # Going down
+                    output[ceil(index + band.start)] = flap
+            else:
+                # The data may have just crept into this band without being a
+                # true change into the new flap setting. Let's just ignore this.
+                pass
 
     for gap in np.ma.clump_masked(output):
         before = output[max(gap.start - 1, 0)]
