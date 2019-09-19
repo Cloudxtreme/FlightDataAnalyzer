@@ -1493,11 +1493,11 @@ class TestAltitudeQNH(unittest.TestCase):
             self.assertTrue(baro or baro_capt or baro_fo)
 
     def test_derive(self):
-        alt_std = P('Altitude STD', np.ma.ones(25) * 10000)
-        baro = P('Baro Correction', np.ma.arange(1000,1025))
+        alt_std = P('Altitude STD', np.ma.ones(25, dtype=np.float) * 10000)
+        baro = P('Baro Correction', np.ma.arange(1000,1025, dtype=np.float))
 
         node = self.node_class()
-        node.derive(alt_std, None, None, baro)
+        node.derive(alt_std, None, None, baro, None, None, None)
 
         expected_alt_qnh = [
             9636, 9663, 9691, 9719, 9746, 9774, 9801, 9828, 9856, 9883,
@@ -1507,6 +1507,52 @@ class TestAltitudeQNH(unittest.TestCase):
         for expected, got in zip(expected_alt_qnh, node.array):
             self.assertEqual(expected, int(got))
 
+    def test_baro_setting(self):
+        alt_std = P('Altitude STD', np.ma.ones(25, dtype=np.float) * 10000)
+        baro = P('Baro Correction', np.ma.arange(1000,1025, dtype=np.float))
+        values_mapping = {0: 'ALT QFE', 1: 'ALT QNH', 2: 'ALT STD'}
+        baro_sel = M(
+            'Baro Setting Selection',
+            array = np.ma.array([1] * 10 + [2] * 5 + [1] * 10),
+            values_mapping=values_mapping
+        )
+
+        node = self.node_class()
+        node.derive(alt_std, None, None, baro, baro_sel, None, None)
+
+        expected_alt_qnh = [
+            9636, 9663, 9691, 9719, 9746, 9774, 9801, 9828, 9856, 9883,
+            10000, 10000, 10000, 10000, 10000, 10047, 10074, 10102, 10129, 10156,
+            10183, 10210, 10238, 10265, 10292
+        ]
+        for expected, got in zip(expected_alt_qnh, node.array):
+            self.assertEqual(expected, int(got))
+
+    def test_baro_cpt_fo_setting(self):
+        alt_std = P('Altitude STD', np.ma.ones(25, dtype=np.float) * 10000)
+        baro = P('Baro Correction', np.ma.arange(1000,1025, dtype=np.float))
+        values_mapping = {0: 'QFE', 1: 'QNH', 2: 'STD', 3: 'Not Used'}
+        baro_sel_cpt = M(
+            'Baro Setting Selection (Capt)',
+            array = np.ma.array([1] * 10 + [2] * 5 + [1] * 10),
+            values_mapping=values_mapping
+        )
+        baro_sel_fo = M(
+            'Baro Setting Selection (FO)',
+            array = np.ma.array([1] * 10 + [2] * 5 + [1] * 10),
+            values_mapping=values_mapping
+        )
+
+        node = self.node_class()
+        node.derive(alt_std, None, None, baro, None, baro_sel_cpt, baro_sel_fo)
+
+        expected_alt_qnh = [
+            9636, 9663, 9691, 9719, 9746, 9774, 9801, 9828, 9856, 9883,
+            10000, 10000, 10000, 10000, 10000, 10047, 10074, 10102, 10129, 10156,
+            10183, 10210, 10238, 10265, 10292
+        ]
+        for expected, got in zip(expected_alt_qnh, node.array):
+            self.assertEqual(expected, int(got))
 
 class TestAltitudeVisualizationWithGroundOffset(unittest.TestCase, NodeTest):
     def setUp(self):
