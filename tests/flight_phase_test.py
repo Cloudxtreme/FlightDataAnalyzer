@@ -3346,7 +3346,7 @@ class TestBaroDifference(unittest.TestCase, NodeTest):
                     frequency=1./4)
 
         node = self.node_class()
-        node.get_derived((baro_capt, baro_fo, None, None, None))
+        node.get_derived((baro_capt, baro_fo, None, None, None, None))
 
         self.assertEqual(len(node), 2)
         self.assertEqual(node.get_slices(), [
@@ -3371,7 +3371,7 @@ class TestBaroDifference(unittest.TestCase, NodeTest):
                     frequency=1./4)
 
         node = self.node_class()
-        node.get_derived((baro_capt, baro_fo, None, None, None))
+        node.get_derived((baro_capt, baro_fo, None, None, None, None))
 
         self.assertEqual(len(node), 0)
 
@@ -3392,7 +3392,7 @@ class TestBaroDifference(unittest.TestCase, NodeTest):
                     frequency=1./4)
 
         node = self.node_class()
-        node.get_derived((baro_capt, baro_fo, None, None, None))
+        node.get_derived((baro_capt, baro_fo, None, None, None, None))
 
         self.assertEqual(len(node), 0)
 
@@ -3421,7 +3421,7 @@ class TestBaroDifference(unittest.TestCase, NodeTest):
         )
 
         node = self.node_class()
-        node.get_derived((baro_capt, baro_fo, baro_sel, None, None))
+        node.get_derived((baro_capt, baro_fo, baro_sel, None, None, None))
 
         self.assertEqual(len(node), 1)
         self.assertEqual(node.get_slices(), [
@@ -3464,11 +3464,44 @@ class TestBaroDifference(unittest.TestCase, NodeTest):
         )
 
         node = self.node_class()
-        node.get_derived((baro_capt, baro_fo, None, baro_sel_cpt, baro_sel_fo))
+        node.get_derived((baro_capt, baro_fo, None, baro_sel_cpt, baro_sel_fo, None))
 
         self.assertEqual(len(node), 1)
         self.assertEqual(node.get_slices(), [
                 slice(0, 3, None),
+            ])
+
+        self.assertEqual(node.frequency, 1./4.)
+
+    def test_bar_cor_isis(self):
+        baro_capt = P('Baro Correction (Capt)',
+                      array=np.ma.concatenate([
+                          np.ma.ones(10) * 995,
+                          np.ma.ones(10) * 1013
+                          ]),
+                      frequency=1./4)
+        baro_fo = P('Baro Correction (FO)',
+                    array=np.ma.concatenate([
+                        np.ma.ones(2) * 995,
+                        np.ma.ones(8) * 998,
+                        np.ma.ones(10) * 1013
+                        ]),
+                    frequency=1./4)
+        baro_cor_isis = P(
+            'Baro Correction (ISIS)',
+            array=np.ma.concatenate([
+                np.ones(8, dtype=np.int) * 995,
+                np.ones(12, dtype=np.int) * 1013,
+            ]),
+            frequency=1./4
+        )
+
+        node = self.node_class()
+        node.get_derived((baro_capt, baro_fo, None, None, None, baro_cor_isis))
+
+        self.assertEqual(len(node), 1)
+        self.assertEqual(node.get_slices(), [
+                slice(2, 8, None),
             ])
 
         self.assertEqual(node.frequency, 1./4.)
