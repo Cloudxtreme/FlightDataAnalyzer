@@ -7822,7 +7822,7 @@ class TestBaroCorrectionMinus1013Above20000FtMax(unittest.TestCase, NodeTest):
                     ]))
         baro = P('Baro Correction', array=np.ma.ones(90) * 1010)
         level = buildsection('Level Flight', 30, 59)
-        node.derive(baro, alt_std, level, None, None, None)
+        node.derive(baro, alt_std, level, None, None, None, None)
 
         self.assertEqual(len(node), 1)
         self.assertEqual(node[0].value, 3)
@@ -7843,7 +7843,7 @@ class TestBaroCorrectionMinus1013Above20000FtMax(unittest.TestCase, NodeTest):
             np.ma.ones(10) * 1021
         ]))
         level = buildsection('Level Flight', 30, 59)
-        node.derive(baro, alt_std, level, None, None, None)
+        node.derive(baro, alt_std, level, None, None, None, None)
 
         self.assertEqual(len(node), 0)
 
@@ -7860,7 +7860,7 @@ class TestBaroCorrectionMinus1013Above20000FtMax(unittest.TestCase, NodeTest):
                     ]))
         baro = P('Baro Correction', array=np.ma.ones(90) * 1010)
         level = buildsections('Level Flight', [18, 33], [45, 59])
-        node.derive(baro, alt_std, level, None, None, None)
+        node.derive(baro, alt_std, level, None, None, None, None)
 
         self.assertEqual(len(node), 1)
         self.assertEqual(node[0].value, 3)
@@ -7881,7 +7881,7 @@ class TestBaroCorrectionMinus1013Above20000FtMax(unittest.TestCase, NodeTest):
                      np.ma.ones(25) * 1005,
                  ]))
         level = buildsection('Level Flight', 30, 59)
-        node.derive(baro, alt_std, level, None, None, None)
+        node.derive(baro, alt_std, level, None, None, None, None)
 
         self.assertEqual(len(node), 0)
 
@@ -7897,7 +7897,7 @@ class TestBaroCorrectionMinus1013Above20000FtMax(unittest.TestCase, NodeTest):
                         np.linspace(30000, 0, num=31)
                     ]))
         level = buildsections('Level Flight', [30, 38], [43, 59])
-        node.derive(None, alt_std, level, None, None, None)
+        node.derive(None, alt_std, level, None, None, None, None)
 
         self.assertEqual(len(node), 1)
         self.assertAlmostEqual(node[0].value, 300.0/27.3, delta = 0.1)
@@ -7922,7 +7922,7 @@ class TestBaroCorrectionMinus1013Above20000FtMax(unittest.TestCase, NodeTest):
             ]),
             values_mapping={0: 'ALT QFE', 1: 'ALT STD', 2: 'ALT QNH'})
         level = buildsection('Level Flight', 30, 59)
-        node.derive(baro, alt_std, level, baro_sel, None, None)
+        node.derive(baro, alt_std, level, baro_sel, None, None, None)
 
         self.assertEqual(len(node), 0)
 
@@ -7954,9 +7954,33 @@ class TestBaroCorrectionMinus1013Above20000FtMax(unittest.TestCase, NodeTest):
             ]),
             values_mapping=values_mapping)
         level = buildsection('Level Flight', 30, 59)
-        node.derive(baro, alt_std, level, None, baro_sel_cpt, baro_sel_fo)
+        node.derive(baro, alt_std, level, None, baro_sel_cpt, baro_sel_fo, None)
 
         self.assertEqual(len(node), 0)
+
+    def test_baro_cor_isis(self):
+        node = self.node_class()
+        # Climb to 30,000ft, cruise and descend
+        alt_std = P('Altitude STD',
+                    array=np.ma.concatenate([
+                        np.linspace(0, 30000, num=31),
+                        np.ma.ones(28) * 30000,
+                        np.linspace(30000, 0, num=31)
+                    ]))
+        baro = P('Baro Correction', array=np.ma.ones(90) * 1010)
+        baro_cor_isis = P(
+            'Baro Correction (ISIS)',
+            array=np.ma.concatenate([
+                np.ones(15, dtype=np.int) * 1010,
+                np.ones(60, dtype=np.int) * 1013,
+                np.ones(15, dtype=np.int) * 1010,
+            ]),
+        )
+        level = buildsection('Level Flight', 30, 59)
+        node.derive(baro, alt_std, level, None, None, None, baro_cor_isis)
+
+        self.assertEqual(len(node), 0)
+
 
 class TestBaroDifferenceDuration(unittest.TestCase):
     def setUp(self):

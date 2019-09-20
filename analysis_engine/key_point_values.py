@@ -6258,7 +6258,8 @@ class BaroCorrectionMinus1013Above20000FtDuringLevelFlightMax(KeyPointValueNode)
                level=S('Level Flight'),
                baro_sel=M('Baro Setting Selection'),
                baro_sel_cpt=M('Baro Setting Selection (Capt)'),
-               baro_sel_fo=M('Baro Setting Selection (FO)')):
+               baro_sel_fo=M('Baro Setting Selection (FO)'),
+               baro_cor_isis=P('Baro Correction (ISIS)')):
 
         _, above_20000ft = slices_above(alt_std.array, 20000)
         above_20000ft_level = slices_and(above_20000ft, level.get_slices())
@@ -6269,6 +6270,9 @@ class BaroCorrectionMinus1013Above20000FtDuringLevelFlightMax(KeyPointValueNode)
                 baro_dev[baro_sel.array == 'ALT STD'] = 0
             elif baro_sel_cpt and baro_sel_fo:
                 baro_dev[(baro_sel_cpt.array == 'STD') | (baro_sel_fo.array == 'STD')] = 0
+            elif baro_cor_isis:
+                baro_dev[np.isclose(baro_cor_isis.array, 1013)] = 0
+
             _, significant_diffs = slices_above(baro_dev, 1)
             above_20000ft_level = slices_and(above_20000ft_level, significant_diffs)
             above_20000ft_level = slices_int(above_20000ft_level)
