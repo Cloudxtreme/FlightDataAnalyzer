@@ -1548,11 +1548,9 @@ class TestAltitudeQNH(unittest.TestCase, NodeTest):
     def test_baro_correction_isis(self):
         alt_std = P('Altitude STD', np.ma.ones(25, dtype=np.float) * 10000)
         baro = P('Baro Correction', np.ma.arange(1000,1025, dtype=np.float))
-        values_mapping = {0: 'ALT QFE', 1: 'ALT QNH', 2: 'ALT STD'}
         baro_cor_isis = P(
             'Baro Correction (ISIS)',
             array = np.ma.concatenate((np.ones(10) * 1001, np.ones(5) * 1013, np.ones(10) * 1024)),
-            values_mapping=values_mapping
         )
 
         node = self.node_class()
