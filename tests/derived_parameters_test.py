@@ -1487,17 +1487,14 @@ class TestAltitudeQNH(unittest.TestCase):
         self.assertNotEqual(opts,[], 'No operational combinations')
         for opt in opts:
             self.assertIn('Altitude STD', opt)
-            baro = 'Baro Correction' in opt
-            baro_capt = 'Baro Correction (Capt)' in opt
-            baro_fo = 'Baro Correction (FO)' in opt
-            self.assertTrue(baro or baro_capt or baro_fo)
+            self.assertIn('Baro Correction', opt)
 
     def test_derive(self):
         alt_std = P('Altitude STD', np.ma.ones(25, dtype=np.float) * 10000)
         baro = P('Baro Correction', np.ma.arange(1000,1025, dtype=np.float))
 
         node = self.node_class()
-        node.derive(alt_std, None, None, baro, None, None, None)
+        node.derive(alt_std, baro, None, None, None)
 
         expected_alt_qnh = [
             9636, 9663, 9691, 9719, 9746, 9774, 9801, 9828, 9856, 9883,
@@ -1518,7 +1515,7 @@ class TestAltitudeQNH(unittest.TestCase):
         )
 
         node = self.node_class()
-        node.derive(alt_std, None, None, baro, baro_sel, None, None)
+        node.derive(alt_std, baro, baro_sel, None, None)
 
         expected_alt_qnh = [
             9636, 9663, 9691, 9719, 9746, 9774, 9801, 9828, 9856, 9883,
@@ -1544,7 +1541,7 @@ class TestAltitudeQNH(unittest.TestCase):
         )
 
         node = self.node_class()
-        node.derive(alt_std, None, None, baro, None, baro_sel_cpt, baro_sel_fo)
+        node.derive(alt_std, baro, None, baro_sel_cpt, baro_sel_fo)
 
         expected_alt_qnh = [
             9636, 9663, 9691, 9719, 9746, 9774, 9801, 9828, 9856, 9883,
@@ -1553,6 +1550,7 @@ class TestAltitudeQNH(unittest.TestCase):
         ]
         for expected, got in zip(expected_alt_qnh, node.array):
             self.assertEqual(expected, int(got))
+
 
 class TestAltitudeVisualizationWithGroundOffset(unittest.TestCase, NodeTest):
     def setUp(self):
