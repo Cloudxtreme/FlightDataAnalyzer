@@ -1217,7 +1217,8 @@ class AltitudeQNH(DerivedParameterNode):
                baro=P('Baro Correction'),
                baro_sel=M('Baro Setting Selection'),
                baro_sel_cpt=M('Baro Setting Selection (Capt)'),
-               baro_sel_fo=M('Baro Setting Selection (FO)')):
+               baro_sel_fo=M('Baro Setting Selection (FO)'),
+               baro_cor_isis=P('Baro Correction (ISIS)')):
 
         if np.ma.count(baro.array):
             baro_fixed = nearest_neighbour_mask_repair(baro.array)
@@ -1225,6 +1226,8 @@ class AltitudeQNH(DerivedParameterNode):
                 baro_fixed[baro_sel.array == 'ALT STD'] = 1013.25
             elif baro_sel_cpt and baro_sel_fo:
                 baro_fixed[(baro_sel_cpt.array == 'STD') | (baro_sel_fo.array == 'STD')] = 1013.25
+            elif baro_cor_isis:
+                baro_fixed[np.isclose(baro_cor_isis.array, 1013)] = 1013.25
 
             alt_qnh = np_ma_masked_zeros_like(alt_std.array)
 
